@@ -4,43 +4,31 @@ import logging
 import jinja2
 import sys
 import random
+import uninhibited
 
 import aiohttp_jinja2
 from aiohttp import web
 
 from .views import setup as setup_routes
 from . import text
+from . import signals
 
 log = logging.getLogger(__name__)
 
 
-def scroller():
-    x = random.randint(0, int(64*2.5))
-    y = 10
-    text.write('http://ledpi', x=x, y=y, font='fonts/7x13.bdf')
-
-
-async def idler(app):
-    log.info('Idler')
-    try:
-        while True:
-            log.info('Idling')
-            await app.loop.run_in_executor(None, scroller)
-            await asyncio.sleep(10)
-    except asyncio.CancelledError:
-        pass
-    finally:
-        log.info('Done with idler')
-
-
+@signals.startup
 async def start_background_tasks(app):
-    app['idler'] = app.loop.create_task(idler(app))
+    log.info('Startup: %s', app)
+
+    # app['idler'] = app.loop.create_task(idler(app))
 
 
+@signals.cleanup
 async def cleanup_background_tasks(app):
-    log.info('cleanup background tasks...')
-    app['idler'].cancel()
-    await app['idler']
+    log.info('Cleanup: %s', app)
+
+    # app['idler'].cancel()
+    # await app['idler']
 
 
 async def init(loop):
@@ -48,12 +36,11 @@ async def init(loop):
 
     app['sockets'] = {}
 
-    app.on_startup.append(start_background_tasks)
-    app.on_cleanup.append(cleanup_background_tasks)
-    app.on_shutdown.append(shutdown)
+    app.on_startup.append(signals.startup)
+    app.on_cleanup.append(signals.cleanup)
+    app.on_shutdown.append(signals.shutdown)
 
-    aiohttp_jinja2.setup(
-        app, loader=jinja2.PackageLoader('ledbot', 'templates'))
+    aiohttp_jinja2.setup(app, loader=jinja2.PackageLoader('ledbot', 'templates'))
 
     setup_routes(app)
 
@@ -77,6 +64,7 @@ def main(argv):
     web.run_app(app, port=80)
 
     return app
+
 
 if __name__ == '__main__':
     main(sys.argv)

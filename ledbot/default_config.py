@@ -1,0 +1,53 @@
+from .utils import AttrDict
+from . import __version__
+
+
+class Configuration(AttrDict):
+    pass
+
+
+class DefaultConfig(Configuration):
+    APP_NAME = 'ledbot'
+    APP_DESC = '{name}/{version}'.format(name=APP_NAME, version=__version__)
+    PACKAGE_PATH = os.path.dirname(__file__)
+
+    DEBUG = False
+    PROFILING = False
+    TESTING = False
+    DEBUG_AUTORELOAD = True
+
+    BIND = '0.0.0.0:8080'
+
+    LOGGING = {
+        'version': 1,
+        # 'disable_existing_loggers': False,
+        # 'incremental': True,
+        'formatters': {
+            'standard': {
+                'format': '%(asctime)s| %(name)s/%(processName)s[%(process)d]-%(threadName)s[%(thread)d]: '
+                        # '[%(request_id)s] '
+                        '%(message)s @%(funcName)s:%(lineno)d #%(levelname)s',
+            },
+        },
+        'handlers': {
+            'console': {
+                'formatter': 'standard',
+                'class': 'logging.StreamHandler',
+            },
+            # 'logfile': {
+            #     'formatter': 'standard',
+            #     'class': 'logging.FileHandler',
+            #     'filename': 'var/ledbot.log',
+            # },
+        },
+        'root': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            # 'level': 'DEBUG',
+        },
+        'loggers': {
+            'ledbot': dict(level='DEBUG'),
+            'ledbot.request': dict(handlers=['console_request'], propagate=False),
+        }
+    }
+
