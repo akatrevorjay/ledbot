@@ -1,31 +1,30 @@
 import asyncio
 import logging
-
-import jinja2
 import sys
-import random
-import uninhibited
 
-import aiohttp_jinja2
+from . import log
+from . import signals
+from . import text
+
 from aiohttp import web
+import aiohttp_jinja2
+import jinja2
 
 from .views import setup as setup_routes
-from . import text
-from . import signals
 
-log = logging.getLogger(__name__)
+_LOG = log.get_logger()
 
 
 @signals.startup
 async def start_background_tasks(app):
-    log.info('Startup: %s', app)
+    _LOG.info('Startup: %s', app)
 
     # app['idler'] = app.loop.create_task(idler(app))
 
 
 @signals.cleanup
 async def cleanup_background_tasks(app):
-    log.info('Cleanup: %s', app)
+    _LOG.info('Cleanup: %s', app)
 
     # app['idler'].cancel()
     # await app['idler']
