@@ -1,11 +1,10 @@
 import random
 import sys
 import six
-import setproctitle
 import operator
-import tldextract
 import wrapt
 import cachetools
+import cachetools.func
 import collections
 import time
 import itertools
@@ -14,12 +13,77 @@ import warnings
 
 from six.moves.urllib_parse import urlsplit, parse_qs, urlunsplit, urlencode
 
-from ledbot.log import get_logger, _namespace_from_calling_context
-import mainline.utils
+from .log import get_logger, _namespace_from_calling_context
 
-_LOG = get_logger()
+_log = get_logger()
+
 _sentinel = object()
 _default = []  # evaluates to False
+
+IS_PYPY = '__pypy__' in sys.builtin_module_names
+
+
+def _get_object_init():
+    if six.PY3 or IS_PYPY:
+        return six.get_unbound_function(object.__init__)
+
+
+OBJECT_INIT = _get_object_init()
+
+
+class ProxyMutableMapping(collections.MutableMapping):
+    """Proxies an existing Mapping."""
+
+    def __init__(self, mapping):
+        self.__mapping = mapping
+
+    _fancy_repr = True
+
+    def __repr__(self):
+        if self._fancy_repr:
+            return '<%s %s>' % (self.__class__.__name__, self.__mapping)
+        else:
+            return '%s' % dict(self)
+
+    def __contains__(self, item):
+        return item in self.__mapping
+
+    def __getitem__(self, item):
+        return self.__mapping[item]
+
+    def __setitem__(self, key, value):
+        self.__mapping[key] = value
+
+    def __delitem__(self, key):
+        del self.__mapping[key]
+
+    def __iter__(self):
+        return iter(self.__mapping)
+
+    def __len__(self):
+        return len(self.__mapping)
+
+
+class MissingProxyMutableMapping(ProxyMutableMapping):
+
+    def __getitem__(self, item):
+        try:
+            return super(MissingProxyMutableMapping, self).__getitem__(item)
+        except KeyError:
+            return self.__missing__(item)
+
+    def __missing__(self, item):
+        raise KeyError(item)
+
+
+def set_proc_title(title=None, base='ledbot'):
+    import setproctitle
+
+    if not title:
+        title = _namespace_from_calling_context()
+
+    title = '%s.%s' % (base, title)
+    setproctitle.setproctitle(title)
 
 
 def set_query_params(url, **kwargs):
@@ -102,13 +166,6 @@ def accumulate(iterable, func=operator.add):
     for element in it:
         total = func(total, element)
         yield total
-
-
-def set_proc_title(title=None):
-    if not title:
-        title = _namespace_from_calling_context()
-    title = 'ledbot.%s' % title
-    setproctitle.setproctitle(title)
 
 
 def consume(iterator, n=None):
@@ -223,15 +280,19 @@ def rand_hex(length=8):
     """
     return '%0{}x'.format(length) % random.randrange(16**length)
 
-# Do not request latest TLS list on init == suffix_list_url=False
-_tldex = tldextract.TLDExtract(suffix_list_url=False)
-
 
 # This is cached because tldextract is SLOW
-@cachetools.ttl_cache(maxsize=1024, ttl=600)
+@cachetools.func.ttl_cache(maxsize=1024, ttl=600)
 def split_domain_into_subdomains(domain, split_tld=False):
+    if not hasattr(split_domain_into_subdomains, '_tldex'):
+        import tldextract
+        # Do not request latest TLS list on init == suffix_list_url=False
+        split_domain_into_subdomains._tldex = tldextract.TLDExtract(suffix_list_url=False)
+    _tldex = split_domain_into_subdomains._tldex
+
     # Requires unicode
     domain = ensure_decoded_text(domain)
+
     tx = _tldex(domain)
 
     domains = []
@@ -368,10 +429,7 @@ def cachedmethod(cache, key=_default, lock=None, typed=_default, cached_exceptio
     if key is not _default and not callable(key):
         key, typed = _default, key
     if typed is not _default:
-        warnings.warn(
-            "Passing 'typed' to cachedmethod() is deprecated, "
-            "use 'key=typedkey' instead", DeprecationWarning, 2
-        )
+        warnings.warn("Passing 'typed' to cachedmethod() is deprecated, " "use 'key=typedkey' instead", DeprecationWarning, 2)
 
     def decorator(method):
         # pass method to default key function for backwards compatibilty
@@ -450,7 +508,7 @@ class Timer(object):
         self.msecs = self.secs * 1000  # millisecs
 
         if self.verbose:
-            _LOG.debug('%s: Elapsed time: %f ms', self, self.msecs)
+            _log.debug('%s: Elapsed time: %f ms', self, self.msecs)
 
 
 ALL = object()
@@ -489,11 +547,11 @@ def traverse_tree(mapping, keys=[ALL], __level=0):
         for child in mapping[key]:
             __level += 1
             yield child
-            yield traverse(mapping, child, keys=keys, __level=__level)
+            yield traverse_tree(child, keys=keys, __level=__level)
             __level -= 1
 
 
-traverse.ALL = ALL
+traverse_tree.ALL = ALL
 
 
 def get_tree_node(mapping, key, default=_sentinel, parent=False):

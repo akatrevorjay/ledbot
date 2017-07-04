@@ -24,9 +24,20 @@ class DefaultConfig(Configuration):
         # 'incremental': True,
         'formatters': {
             'standard': {
+                '()': 'colorlog.ColoredFormatter',
+                'format': '%(bg_black)s%(log_color)s'
+                        '[%(asctime)s] '
+                        '[%(name)s/%(process)d] '
+                        '%(message)s '
+                        '%(blue)s@%(funcName)s:%(lineno)d '
+                        '#%(levelname)s'
+                        '%(reset)s',
+                'datefmt': '%H:%M:%S',
+            },
+            'simple': {
                 'format': '%(asctime)s| %(name)s/%(processName)s[%(process)d]-%(threadName)s[%(thread)d]: '
-                        # '[%(request_id)s] '
-                        '%(message)s @%(funcName)s:%(lineno)d #%(levelname)s',
+                          '%(message)s @%(funcName)s:%(lineno)d #%(levelname)s',
+                'datefmt': '%Y-%m-%d %H:%M:%S',
             },
         },
         'handlers': {
