@@ -1,64 +1,60 @@
+import os
+
 from .utils import AttrDict
 from . import __version__
 
 
-class Configuration(AttrDict):
-    pass
+APP_NAME = 'ledbot'
+APP_DESC = '{name}/{version}'.format(name=APP_NAME, version=__version__)
+PACKAGE_PATH = os.path.dirname(__file__)
 
+DEBUG = False
+PROFILING = False
+TESTING = False
+DEBUG_AUTORELOAD = True
 
-class DefaultConfig(Configuration):
-    APP_NAME = 'ledbot'
-    APP_DESC = '{name}/{version}'.format(name=APP_NAME, version=__version__)
-    PACKAGE_PATH = os.path.dirname(__file__)
+BIND = '0.0.0.0:8080'
 
-    DEBUG = False
-    PROFILING = False
-    TESTING = False
-    DEBUG_AUTORELOAD = True
-
-    BIND = '0.0.0.0:8080'
-
-    LOGGING = {
-        'version': 1,
-        # 'disable_existing_loggers': False,
-        # 'incremental': True,
-        'formatters': {
-            'standard': {
-                '()': 'colorlog.ColoredFormatter',
-                'format': '%(bg_black)s%(log_color)s'
-                        '[%(asctime)s] '
-                        '[%(name)s/%(process)d] '
-                        '%(message)s '
-                        '%(blue)s@%(funcName)s:%(lineno)d '
-                        '#%(levelname)s'
-                        '%(reset)s',
-                'datefmt': '%H:%M:%S',
-            },
-            'simple': {
-                'format': '%(asctime)s| %(name)s/%(processName)s[%(process)d]-%(threadName)s[%(thread)d]: '
-                          '%(message)s @%(funcName)s:%(lineno)d #%(levelname)s',
-                'datefmt': '%Y-%m-%d %H:%M:%S',
-            },
+LOGGING = {
+    'version': 1,
+    # 'disable_existing_loggers': False,
+    # 'incremental': True,
+    'formatters': {
+        'standard': {
+            '()': 'colorlog.ColoredFormatter',
+            'format': '%(bg_black)s%(log_color)s'
+                    '[%(asctime)s] '
+                    '[%(name)s/%(process)d] '
+                    '%(message)s '
+                    '%(blue)s@%(funcName)s:%(lineno)d '
+                    '#%(levelname)s'
+                    '%(reset)s',
+            'datefmt': '%H:%M:%S',
         },
-        'handlers': {
-            'console': {
-                'formatter': 'standard',
-                'class': 'logging.StreamHandler',
-            },
-            # 'logfile': {
-            #     'formatter': 'standard',
-            #     'class': 'logging.FileHandler',
-            #     'filename': 'var/ledbot.log',
-            # },
+        'simple': {
+            'format': '%(asctime)s| %(name)s/%(processName)s[%(process)d]-%(threadName)s[%(thread)d]: '
+                        '%(message)s @%(funcName)s:%(lineno)d #%(levelname)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
         },
-        'root': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            # 'level': 'DEBUG',
+    },
+    'handlers': {
+        'console': {
+            'formatter': 'standard',
+            'class': 'logging.StreamHandler',
         },
-        'loggers': {
-            'ledbot': dict(level='DEBUG'),
-            'ledbot.request': dict(handlers=['console_request'], propagate=False),
-        }
+        # 'logfile': {
+        #     'formatter': 'standard',
+        #     'class': 'logging.FileHandler',
+        #     'filename': 'var/ledbot.log',
+        # },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+        # 'level': 'DEBUG',
+    },
+    'loggers': {
+        'ledbot': dict(level='DEBUG'),
     }
+}
 

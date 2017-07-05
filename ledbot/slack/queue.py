@@ -216,6 +216,8 @@ class Downloadable(metaclass=abc.ABCMeta):
         if session is None:
             session = self._session
 
+        log.info('Downloading uri: %s', self.uri)
+
         async with session.get(self.uri) as resp:  # type: aiohttp.ClientResponse
             resp.raise_for_status()
 

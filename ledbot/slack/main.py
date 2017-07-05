@@ -12,11 +12,11 @@ log = get_logger()
 
 def init():
     # init logging
-    logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger('websockets').setLevel(logging.INFO)
-
-    import coloredlogs
-    coloredlogs.install(level=logging.DEBUG)
+    # logging.basicConfig(level=logging.DEBUG)
+    # logging.getLogger('websockets').setLevel(logging.INFO)
+    #
+    # import coloredlogs
+    # coloredlogs.install(level=logging.DEBUG)
 
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())

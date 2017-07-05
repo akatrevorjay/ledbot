@@ -4,7 +4,7 @@ from ._version import __version__  # NOQA
 import uninhibited as _uninhibited
 
 # Package signals
-signals = _uninhibited.AsyncDispatch([
+signals = _uninhibited.Dispatch([
     # package
     'early_init', 'init',
     # http

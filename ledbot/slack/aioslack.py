@@ -182,7 +182,6 @@ class UsersMapping(StateMapping):
         async with self._pop_lock:
             if just_waiting:
                 return
-            log.info('Populating %r state', self.__class__)
 
             client = self._parent.client
 
