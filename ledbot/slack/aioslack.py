@@ -102,14 +102,14 @@ class ChannelsMapping(StateMapping):
             if just_waiting:
                 return
 
-            client = self._parent.client
-
-            log.info('Populating %s state', self)
             if r_channels is None:
-                r_channels = await client.get("channels.list", callback=lambda response: response['channels'])
+                r_channels = await self._parent.client.get("channels.list", callback=lambda response: response['channels'])
+
             for r_chan in r_channels:
                 chan = Channel(r_chan)
                 self.add(chan)
+
+            log.info('Populated %r state.', self)
 
 
 @attr.s(repr=False)
@@ -124,15 +124,14 @@ class UsersMapping(StateMapping):
             if just_waiting:
                 return
 
-            client = self._parent.client
-
             if r_members is None:
-                r_members = await client.get("users.list", callback=lambda response: response['members'])
+                r_members = await self._parent.client.get("users.list", callback=lambda response: response['members'])
+
             for r_user in r_members:
                 user = User(r_user)
                 self.add(user)
 
-            log.info('Populated %r state: count=%d', self.__class__, len(self))
+            log.info('Populated %r state.', self)
 
 
 @attr.s()
