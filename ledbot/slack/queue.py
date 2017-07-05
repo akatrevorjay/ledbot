@@ -199,14 +199,23 @@ class SlackMessage(RtmEvent):
 
 
 @attr.s
-class Downloadable(metaclass=abc.ABCMeta):
-    content = attr.ib(default=None)
+class Downloadable(utils.ProxyMutableMapping, metaclass=abc.ABCMeta):
+    _store = attr.ib(repr=False)
+
+    content = attr.ib(default=None, repr=False)
     content_type = attr.ib(default=None)
     content_length = attr.ib(default=None)
+
+    def __attrs_post_init__(self):
+        utils.ProxyMutableMapping.__init__(self, self._store)
 
     @abc.abstractproperty
     def uri(self) -> yarl.URL:
         pass
+
+    @property
+    def is_downloaded(self):
+        return self.content is not None
 
     @utils.lazyclassproperty
     def _session(self) -> aiohttp.ClientSession:
@@ -216,7 +225,7 @@ class Downloadable(metaclass=abc.ABCMeta):
         if session is None:
             session = self._session
 
-        log.info('Downloading uri: %s', self.uri)
+        log.info('Downloading %s', self)
 
         async with session.get(self.uri) as resp:  # type: aiohttp.ClientResponse
             resp.raise_for_status()
@@ -226,8 +235,11 @@ class Downloadable(metaclass=abc.ABCMeta):
             self.content_length = resp.content_length
             self.content_type = resp.content_type
 
+        log.info('Downloaded %s', self)
 
-class Attachment(utils.AttrDict, Downloadable):
+
+@attr.s
+class Attachment(Downloadable, utils.AttrDict):
 
     @utils.lazyproperty
     def uri(self) -> yarl.URL:
@@ -239,6 +251,7 @@ class Attachment(utils.AttrDict, Downloadable):
         return uri
 
 
+@attr.s
 class File(utils.AttrDict, Downloadable):
 
     @utils.lazyproperty

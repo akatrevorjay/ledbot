@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 
-import logging
 import asyncio
-
-from ..log import get_logger
+import logging
 
 from . import queue
+from ..log import get_logger
 
 log = get_logger()
 
 
 def init():
-    # init logging
-    # logging.basicConfig(level=logging.DEBUG)
-    # logging.getLogger('websockets').setLevel(logging.INFO)
-    #
-    # import coloredlogs
-    # coloredlogs.install(level=logging.DEBUG)
-
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 

@@ -27,6 +27,7 @@ _sentinel = object()
 
 
 class StateItem(utils.AttrDict):
+
     def __repr__(self):
         return '<%s id=%s name=%s>' % (self.__class__.__name__, self.id, self.name)
 
@@ -146,7 +147,6 @@ class StateMapping(TimedValueSet):
 
     def __repr__(self):
         return '<%s count=%d>' % (self.__class__.__name__, len(self))
-
 
 
 @attr.s(repr=False)
@@ -351,11 +351,36 @@ class Client:
             if len(done) == len(tasks):
                 time.sleep(0.1)
 
-    async def consumer(self, message):
-        jsonified = json.loads(message)
-        log.info('received {}'.format(jsonified["type"]))
-        for handler in itertools.chain(self.handlers[jsonified['type']], self.handlers['*']):
-            asyncio.ensure_future(handler(jsonified))
+    message_factory = attr.ib(default=utils.AttrDict)
+
+    async def consumer(self, message_raw):
+        try:
+            msg = json.loads(message_raw)
+        except ValueError:
+            log.exception('Received bad message: raw=%r', message_raw)
+            raise
+
+        msg = self.message_factory(msg)
+
+        try:
+            msg_type = msg['type']
+            if 'subtype' in msg:
+                msg_type = '%s.%s' % (msg_type, msg['subtype'])
+        except KeyError:
+            log.exception('Received bad message; "type" key(s) missing: msg=%r', msg)
+
+        log.info('received "%s"', msg_type)
+
+        handlers = itertools.chain(
+            self.handlers[msg_type],
+            self.handlers[msg['type']],
+            self.handlers['*'],
+        )
+
+        futs = (h(msg) for h in handlers)
+
+        # rets = await asyncio.gather(*futs)
+        [asyncio.ensure_future(f) for f in futs]
 
     async def producer(self):
         time.sleep(self.PRODUCER_DELAY)

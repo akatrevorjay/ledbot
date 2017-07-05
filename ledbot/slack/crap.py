@@ -1,20 +1,18 @@
-import logging
+import asyncio
+import asyncio.events
+import asyncio.futures
+import asyncio.locks
+import asyncio.log
+import asyncio.queues
 import json
+import logging
 import os
 import re
 
-import asyncio
-import asyncio.queues
-import asyncio.locks
-import asyncio.events
-import asyncio.futures
-import asyncio.log
-
 import aiohttp
-
 import slack_sage
-from slack_sage import handlers, bot
-
+from slack_sage import bot
+from slack_sage import handlers
 
 log = logging.getLogger(__name__)
 
