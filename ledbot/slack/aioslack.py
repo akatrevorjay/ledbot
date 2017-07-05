@@ -1,3 +1,5 @@
+"""Blah"""
+
 import asyncio
 import types
 import collections
@@ -6,6 +8,7 @@ import json
 import time
 import uuid
 import weakref
+import typing as T
 
 import aiohttp
 import websockets
@@ -20,13 +23,21 @@ from .. import log, utils
 
 log = log.get_logger()
 
+_sentinel = object()
+
 
 class StateItem(utils.AttrDict):
     def __repr__(self):
         return '<%s id=%s name=%s>' % (self.__class__.__name__, self.id, self.name)
 
+    def __key(self):
+        return (self.get('id'), self.get('name'))
+
     def __eq__(self, other):
-        pass
+        return self.__key() == other.__key()
+
+    def __hash__(self):
+        return hash(self.__key())
 
 
 class Channel(StateItem):
@@ -37,16 +48,73 @@ class User(StateItem):
     pass
 
 
-@attr.s(repr=False)
-class StateMapping(utils.MissingProxyMutableMapping):
-    _parent = attr.ib()
+@attr.s
+class ProxyMutableSet(collections.MutableSet):
+    _store: collections.MutableSet = attr.ib(default=attr.Factory(set))
 
-    id_map = attr.ib(default=attr.Factory(dict))
+    def __contains__(self, item):
+        return item in self._store
+
+    def __iter__(self):
+        return iter(self._store)
+
+    def __len__(self):
+        return len(self._store)
+
+    def add(self, value):
+        self._store.add(value)
+
+    def discard(self, value):
+        self._store.discard(value)
+
+    def update(self, iterable):
+        """Add all values from an iterable (such as a list or file)."""
+        [self.add(x) for x in iterable]
+
+
+@attr.s
+class TimedValueSet(ProxyMutableSet):
+    """
+    Set that tracks the time a value was added.
+    """
+
+    _added_at = attr.ib(default=attr.Factory(weakref.WeakKeyDictionary))
+
+    def add(self, value):
+        ret = super().add(value)
+        self.touch(value)
+        return ret
+
+    def discard(self, value):
+        ret = super().discard(value)
+        if value in self._added_at:
+            del self._added_at[value]
+
+    def touch(self, value, ts=time.time):
+        if callable(ts):
+            ts = ts()
+        self._added_at[value] = ts
+
+    def added_at(self, value, default=None):
+        ret = self._added_at.get(value, _sentinel)
+        if ret is _sentinel:
+            ret = default
+        return ret
+
+
+# class AttrIndexedIterable(utils.ProxyMutableMapping):
+#     index_attrs = attr.ib(validator=attr.validators.instance_of(collections.Iterable))
+#     indexes: T.Mapping[T.AnyStr, T.Any] = attr.ib(default=attr.Factory(dict))
+
+
+@attr.s(repr=False)
+class StateMapping(TimedValueSet):
+    _parent = attr.ib(default=None)
+
+    id_map = attr.ib(default=attr.Factory(weakref.WeakValueDictionary))
     name_map = attr.ib(default=attr.Factory(weakref.WeakValueDictionary))
 
-    @property
-    def _ProxyMutableMapping__mapping(self):
-        return self.id_map
+    keys = attr.ib(default=['name', 'id'])
 
     _lock = attr.ib(default=attr.Factory(RWLock))
 
@@ -61,8 +129,15 @@ class StateMapping(utils.MissingProxyMutableMapping):
 
     def add(self, v):
         with self._lock.writer_lock:
+            super().add(v)
             self.id_map[v.id] = v
             self.name_map[v.name] = v
+
+    def discard(self, v):
+        with self._lock.reader_lock:
+            del self.id_map[v.id]
+            del self.name_map[v.name]
+            super().discard(v)
 
     _pop_lock = attr.ib(default=attr.Factory(
         lambda self: asyncio.Lock(loop=self._parent.client.loop),
@@ -71,6 +146,7 @@ class StateMapping(utils.MissingProxyMutableMapping):
 
     def __repr__(self):
         return '<%s count=%d>' % (self.__class__.__name__, len(self))
+
 
 
 @attr.s(repr=False)
@@ -124,12 +200,12 @@ class State:
     client = attr.ib()
 
     channels = attr.ib(default=attr.Factory(
-        ChannelsMapping,
+        lambda self: ChannelsMapping(parent=self),
         takes_self=True,
     ))
 
     users = attr.ib(default=attr.Factory(
-        UsersMapping,
+        lambda self: UsersMapping(parent=self),
         takes_self=True,
     ))
 
@@ -143,7 +219,7 @@ class State:
 @attr.s(repr=False)
 class Client:
     PRODUCER_DELAY = 0.5
-    BASE_URL = 'https://slack.com/api'
+    BASE_URI = 'https://slack.com/api'
 
     token = attr.ib()
     handlers = attr.ib(default=attr.Factory(
@@ -191,7 +267,7 @@ class Client:
     async def get(self, path, extraParams={}, extraHeaders={}, callback=None):
 
         async def get_request(session, headers, params):
-            async with session.get('{}/{}'.format(Client.BASE_URL, path), headers=headers, params=params) as resp:
+            async with session.get('{}/{}'.format(self.BASE_URI, path), headers=headers, params=params) as resp:
                 return await self.handle_http_response(resp, path, callback)
 
         return await self.make_http_request(get_request, extraParams, extraHeaders)
@@ -199,12 +275,19 @@ class Client:
     async def post(self, path, extraData={}, extraHeaders={}, callback=None):
 
         async def post_request(session, headers, data):
-            async with session.post('{}/{}'.format(Client.BASE_URL, path), headers=headers, data=data) as resp:
+            async with session.post('{}/{}'.format(self.BASE_URI, path), headers=headers, data=data) as resp:
                 return await self.handle_http_response(resp, path, callback)
 
         return await self.make_http_request(post_request, extraData, extraHeaders)
 
-    async def start_ws_connection(self, loop):
+    @utils.lazyproperty
+    def session(self):
+        return aiohttp.ClientSession()
+
+    async def start(self):
+        log.info("Connecting to Slack websocket API. base_uri=%s", self.BASE_URI)
+
+    async def start_ws_connection(self):
 
         def retrieve(data):
             return (data["url"], data["channels"], data["users"])
@@ -276,8 +359,8 @@ class Client:
             asyncio.ensure_future(handler(jsonified))
 
     async def producer(self):
-        time.sleep(Client.PRODUCER_DELAY)
-        data = await Client.retrieve_data(self.producers.__next__())
+        time.sleep(self.PRODUCER_DELAY)
+        data = await self.retrieve_data(self.producers.__next__())
         if data:
             return json.dumps({"id": uuid.uuid4().int, **data})
 

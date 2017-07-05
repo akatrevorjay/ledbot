@@ -13,6 +13,7 @@ log = get_logger()
 def init():
     # init logging
     logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger('websockets').setLevel(logging.INFO)
 
     import coloredlogs
     coloredlogs.install(level=logging.DEBUG)
@@ -31,7 +32,7 @@ def main():
     loop.run_until_complete(fut)
 
     futs = [
-        queue.slack_client.start_ws_connection(loop),
+        queue.slack_client.start_ws_connection(),
         queue.extractor_worker(loop),
     ]
 

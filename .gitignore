@@ -1,7 +1,17 @@
+*~
+*.swp
+*.swo
+
 *.pyc
 __pycache__/
 
 /*.egg-info
+/.eggs
+/.cache
+/.env
+/.envrc
+/.vscode
+/.python-version
 
 /build/
 

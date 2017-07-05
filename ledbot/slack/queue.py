@@ -4,8 +4,10 @@
 # import functools
 # import operator
 # import sys
+import abc
 import os
 import re
+import itertools
 
 # import asyncio
 # import asyncio.queues
@@ -14,8 +16,10 @@ import re
 # import asyncio.futures
 # import asyncio.log
 # import aiohttp
-# import typing as T
+import typing as T
 
+import six
+import aiohttp
 import attr
 # import paco
 import kawaiisync
@@ -44,17 +48,31 @@ async def _on_slack_all(event):
     log.debug("Event: %s", pf(event))
 
 
+@slack_client.on('file_shared')
+async def _on_slack_message(event):
+    """Slack file faucet."""
+    """
+    {'event_ts': '1499153563.056233',
+    'file': {'id': 'F63F10Z6W'},
+    'file_id': 'F63F10Z6W',
+    'ts': '1499153563.056233',
+    'type': 'file_shared',
+    'user_id': 'U28T1J8GH'}
+    """
+
+    msg = await SlackMessage.from_aioslack_event(event, slack_client)
+    await faucet_q(msg)
+
+
 @slack_client.on('message')
 async def _on_slack_message(event):
     """Slack message faucet."""
 
-    msg = await SlackMessage.from_aioslack_event(event)
+    msg = await SlackMessage.from_aioslack_event(event, slack_client)
     await faucet_q(msg)
 
 
 RE_URL = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
-
-
 """
 Pipeline:
     Slack  ->  Extract  ->  Download  ->  Queue  ->  Play
@@ -79,96 +97,168 @@ async def init(loop):
 
 
 async def extractor_worker(loop):
-    async for msg in faucet_q:
+
+    async def _work(msg: SlackMessage):
         log.debug('msg=%s', msg)
 
-        players = await msg.iter_players()
-        log.debug('players=%r', players)
+        await msg.play()
+
+    async for msg in faucet_q:
+        try:
+            await _work(msg)
+        except Exception:
+            log.exception('Well fuck')
 
 
-@attr.s
-class SlackMessage(utils.ProxyMutableMapping):
+@attr.s(repr=False)
+class RtmEvent(utils.ProxyMutableMapping):
     event = attr.ib()
+    client = attr.ib()
 
-    user_id = attr.ib()
-    channel_id = attr.ib()
-    message = attr.ib()
-    attachments = attr.ib(default=attr.Factory(list))
+    @property
+    def _ProxyMutableMapping__mapping(self):
+        return self.event
 
-    ctx = attr.ib(default=attr.Factory(AttrDict))
+    def __getattr__(self, attr):
+        try:
+            return self.event[attr]
+        except KeyError:
+            raise AttributeError(attr)
 
     user = attr.ib(default=None)
     channel = attr.ib(default=None)
 
+    @property
+    def user_id(self):
+        return self.event.get('user')
+
+    @property
+    def channel_id(self):
+        return self.event.get('channel')
+
+    @utils.lazyproperty
+    def event_ts(self):
+        return float(self.event['event_ts'])
+
     @classmethod
-    async def from_aioslack_event(cls, event, client=None):
+    async def from_aioslack_event(cls, event, client):
+        event = event.copy()
+
         self = cls(
-            user_id=event.get('user'),
-            channel_id=event.get('channel'),
-
-            attachments=event.get('attachments'),
-
-            message=event.get('message'),
+            event=event,
+            client=client,
         )
 
-        self.ctx.client = client
-
         if client:
-            await self.populate(client)
+            await self.populate()
 
         return self
 
     async def populate(self):
-        self.user = await self._client.find_user(self.user_id)
-        self.channel = await self._client.find_channel(self.channel_id)
+        self.user = await self.client.find_user(self.user_id)
+        self.channel = await self.client.find_channel(self.channel_id)
 
-    async def iter_players(self):
-        log.debug('Finding players in %s', self)
+    def __repr__(self):
+        cls = self.__class__
+        text = self.get('text')
 
-        if not self.attachments:
-            return
+        user = self.user or self.event.get('username') or self.user_id
+        channel = self.channel or self.channel_id
+        team = self.event.get('team')
 
-        players = []
+        return f'<{cls.__name__} {user}@{channel}.{team} text={text}>'
 
-        for attach in self.attachments:
+
+@attr.s(repr=False)
+class SlackMessage(RtmEvent):
+    ctx = attr.ib(default=attr.Factory(AttrDict))
+
+    def iter_attachments(self):
+        message = self.event.get('message', {})
+        attachments = message.get('attachments', [])
+        for attach in attachments:
+            yield Attachment(attach)
+
+    def iter_files(self):
+        file = self.event.get('file')
+        if file:
+            yield File(file)
+
+    async def play(self):
+        for attach in itertools.chain(self.iter_files(), self.iter_attachments()):
             player = make_player(attach, msg=self)
             if not player:
                 continue
 
             log.debug("Attachment: %r player=%r", attach, player)
-            players.append(player)
 
-        return players
+            await attach.download()
+
+            log.debug('I would play now')
+            break
+
+
+@attr.s
+class Downloadable(metaclass=abc.ABCMeta):
+    content = attr.ib(default=None)
+    content_type = attr.ib(default=None)
+    content_length = attr.ib(default=None)
+
+    @abc.abstractproperty
+    def uri(self) -> yarl.URL:
+        pass
+
+    @utils.lazyclassproperty
+    def _session(self) -> aiohttp.ClientSession:
+        return aiohttp.ClientSession()
+
+    async def download(self, session: aiohttp.ClientSession=None):
+        if session is None:
+            session = self._session
+
+        async with session.get(self.uri) as resp:  # type: aiohttp.ClientResponse
+            resp.raise_for_status()
+
+            # TODO Check content_length
+            self.content = await resp.read()
+            self.content_length = resp.content_length
+            self.content_type = resp.content_type
+
+
+class Attachment(utils.AttrDict, Downloadable):
+
+    @utils.lazyproperty
+    def uri(self) -> yarl.URL:
+        uri = self.get('image_url')
+        if not uri:
+            return
+
+        uri = yarl.URL(uri)
+        return uri
+
+
+class File(utils.AttrDict, Downloadable):
+
+    @utils.lazyproperty
+    def uri(self) -> yarl.URL:
+        uri = self.get('url_private')
+        if not uri:
+            return
+
+        uri = yarl.URL(uri)
+        return uri
 
 
 @attr.s
 class Player:
     uri = attr.ib()
 
-    content = attr.ib(default=None)
-    mime_type = attr.ib(default=None)
-
-    is_ready = attr.ib(
-        default=False,
-        validator=attr.validators.instance_of(bool),
-    )
-
-    async def download(self):
-        # download
-        content = 'fuck'
-
-        mime_type = 'text/plain'
-
-        # done
-        self.content = content
-        self.mime_type = mime_type
-
 
 class YoutubePlayer(Player):
     service_names = ['youtube']
 
     @classmethod
-    def is_supported(cls, attachment, msg: SlackMessage):
+    def is_supported(cls, attachment, msg: SlackMessage) -> bool:
         service_name = attachment.get('service_name', '').lower()
         if not service_name:
             return False
@@ -185,13 +275,13 @@ class YoutubePlayer(Player):
 class ImagePlayer(Player):
 
     @classmethod
-    def is_supported(cls, attachment, msg: SlackMessage):
+    def is_supported(cls, attachment, msg: SlackMessage) -> bool:
         image_uri = attachment.get('image_url')
         return bool(image_uri)
 
     @classmethod
     def from_attachment(cls, attachment, msg: SlackMessage):
-        uri = attachment['image_uri']
+        uri = attachment['image_url']
         self = cls(uri=uri)
         return self
 
