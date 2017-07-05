@@ -1,3 +1,4 @@
+import attr
 import random
 import sys
 import six
@@ -10,6 +11,7 @@ import time
 import itertools
 import functools
 import warnings
+import weakref
 
 from six.moves.urllib_parse import urlsplit, parse_qs, urlunsplit, urlencode
 
@@ -74,6 +76,62 @@ class MissingProxyMutableMapping(ProxyMutableMapping):
 
     def __missing__(self, item):
         raise KeyError(item)
+
+
+@attr.s
+class ProxyMutableSet(collections.MutableSet):
+    """Proxies an existing set-like object."""
+
+    _store: collections.MutableSet = attr.ib(default=attr.Factory(set))
+
+    def __contains__(self, item):
+        return item in self._store
+
+    def __iter__(self):
+        return iter(self._store)
+
+    def __len__(self):
+        return len(self._store)
+
+    def add(self, value):
+        self._store.add(value)
+
+    def discard(self, value):
+        self._store.discard(value)
+
+    def update(self, iterable):
+        """Add all values from an iterable (such as a list or file)."""
+        [self.add(x) for x in iterable]
+
+
+@attr.s
+class TimedValueSet(ProxyMutableSet):
+    """
+    Set that tracks the time a value was added.
+    """
+
+    _added_at = attr.ib(default=attr.Factory(weakref.WeakKeyDictionary))
+
+    def add(self, value):
+        ret = super().add(value)
+        self.touch(value)
+        return ret
+
+    def discard(self, value):
+        ret = super().discard(value)
+        if value in self._added_at:
+            del self._added_at[value]
+
+    def touch(self, value, ts=time.time):
+        if callable(ts):
+            ts = ts()
+        self._added_at[value] = ts
+
+    def added_at(self, value, default=None):
+        ret = self._added_at.get(value, _sentinel)
+        if ret is _sentinel:
+            ret = default
+        return ret
 
 
 def set_proc_title(title=None, base='ledbot'):
@@ -210,53 +268,6 @@ def dedupe(f, instance, args, kwargs):
     """
     gen = f(*args, **kwargs)
     return dedupe_iter(gen)
-
-
-class TimedValueSet(collections.MutableSet):
-    """
-    Set that tracks the time a value was added.
-    """
-    container_factory = set
-    added_at_mapping_factory = dict
-
-    # added_at_factory = weakref.WeakKeyDictionary
-
-    def __init__(self, seq=None, container_factory=None, added_at_mapping_factory=None):
-        if container_factory:
-            self.container_factory = container_factory
-        if added_at_mapping_factory:
-            self.added_at_mapping_factory = added_at_mapping_factory
-
-        self._store = self.container_factory()
-        self._added_at = self.added_at_mapping_factory()
-        if seq:
-            self.update(seq)
-
-    def __contains__(self, item):
-        return item in self._store
-
-    def __iter__(self):
-        return iter(self._store)
-
-    def __len__(self):
-        return len(self._store)
-
-    def add(self, value):
-        self._store.add(value)
-        self._added_at[value] = time.time()
-
-    def discard(self, value):
-        self._store.discard(value)
-        if value in self._added_at:
-            del self._added_at[value]
-
-    def update(self, iterable):
-        """Add all values from an iterable (such as a list or file)."""
-        # Must comsume generator fully on py3k
-        consume(map(self.add, iterable))
-
-    def added_at(self, value, default=None):
-        return self._added_at.get(value, default)
 
 
 def pycharm_workaround_multiprocessing():

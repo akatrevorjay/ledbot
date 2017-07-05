@@ -49,67 +49,8 @@ class User(StateItem):
     pass
 
 
-@attr.s
-class ProxyMutableSet(collections.MutableSet):
-    _store: collections.MutableSet = attr.ib(default=attr.Factory(set))
-
-    def __contains__(self, item):
-        return item in self._store
-
-    def __iter__(self):
-        return iter(self._store)
-
-    def __len__(self):
-        return len(self._store)
-
-    def add(self, value):
-        self._store.add(value)
-
-    def discard(self, value):
-        self._store.discard(value)
-
-    def update(self, iterable):
-        """Add all values from an iterable (such as a list or file)."""
-        [self.add(x) for x in iterable]
-
-
-@attr.s
-class TimedValueSet(ProxyMutableSet):
-    """
-    Set that tracks the time a value was added.
-    """
-
-    _added_at = attr.ib(default=attr.Factory(weakref.WeakKeyDictionary))
-
-    def add(self, value):
-        ret = super().add(value)
-        self.touch(value)
-        return ret
-
-    def discard(self, value):
-        ret = super().discard(value)
-        if value in self._added_at:
-            del self._added_at[value]
-
-    def touch(self, value, ts=time.time):
-        if callable(ts):
-            ts = ts()
-        self._added_at[value] = ts
-
-    def added_at(self, value, default=None):
-        ret = self._added_at.get(value, _sentinel)
-        if ret is _sentinel:
-            ret = default
-        return ret
-
-
-# class AttrIndexedIterable(utils.ProxyMutableMapping):
-#     index_attrs = attr.ib(validator=attr.validators.instance_of(collections.Iterable))
-#     indexes: T.Mapping[T.AnyStr, T.Any] = attr.ib(default=attr.Factory(dict))
-
-
 @attr.s(repr=False)
-class StateMapping(TimedValueSet):
+class StateMapping(utils.TimedValueSet):
     _parent = attr.ib(default=None)
 
     id_map = attr.ib(default=attr.Factory(weakref.WeakValueDictionary))

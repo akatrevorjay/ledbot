@@ -202,9 +202,10 @@ class SlackMessage(RtmEvent):
 class Downloadable(utils.ProxyMutableMapping, metaclass=abc.ABCMeta):
     _store = attr.ib(repr=False)
 
-    content = attr.ib(default=None, repr=False)
-    content_type = attr.ib(default=None)
-    content_length = attr.ib(default=None)
+    content: str = attr.ib(default=None, repr=False)
+    content_type: str = attr.ib(default=None)
+    content_length: int = attr.ib(default=None)
+    is_downloaded: bool = attr.ib(validator=attr.validators.instance_of(bool))
 
     def __attrs_post_init__(self):
         utils.ProxyMutableMapping.__init__(self, self._store)
