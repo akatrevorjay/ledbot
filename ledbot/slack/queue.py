@@ -26,6 +26,7 @@ import kawaiisync
 # import funcy
 # import mpv
 import yarl
+import youtube_dl
 
 from . import aioslack
 
@@ -115,9 +116,8 @@ class RtmEvent(utils.ProxyMutableMapping):
     event = attr.ib()
     client = attr.ib()
 
-    @property
-    def _ProxyMutableMapping__mapping(self):
-        return self.event
+    def __attrs_post_init__(self):
+        utils.ProxyMutableMapping.__init__(self, self.event)
 
     def __getattr__(self, attr):
         try:
