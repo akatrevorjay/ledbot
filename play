@@ -1,0 +1,6 @@
+#!/bin/zsh
+set -eo pipefail
+
+hbmqtt_pub --url mqtt://localhost -t play/image -m 'https://1d4chan.org/images/thumb/5/57/Youngeisenhorn.jpg/200px-Youngeisenhorn.jpg'
+
+hbmqtt_pub --url mqtt://localhost -t play/youtube -m 'https://www.youtube.com/watch?v=MPAFah0iTDM'
