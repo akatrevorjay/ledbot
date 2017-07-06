@@ -54,7 +54,7 @@ LOGGING = {
         # 'level': 'DEBUG',
     },
     'loggers': {
-        'ledbot': dict(level='DEBUG'),
+        'ledbot': dict(level='DEBUG', propogate=True),
     }
 }
 

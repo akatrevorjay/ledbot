@@ -2,19 +2,20 @@ import asyncio
 import os
 import attr
 import time
+import sys
+import glob
 
 from PyQt5.QtCore import QDir, Qt
 from PyQt5.QtGui import QImage, QPainter, QPalette, QPixmap, QMovie
 from PyQt5.QtWidgets import (
     QAction, QApplication, QFileDialog, QLabel, QMainWindow, QMenu, QMessageBox, QScrollArea, QSizePolicy
 )
-from quamash import QEventLoop, QThreadExecutor
+import quamash
 
 from ..log import get_logger
 from .. import utils
 
 log = get_logger()
-
 
 
 @attr.s
@@ -23,6 +24,15 @@ class LedbotUI(QMainWindow):
 
     window_size = attr.ib(default=(160, 320))
     window_title = attr.ib(default='ledbot')
+
+    _fake_hack_init = attr.ib(default=attr.Factory(
+        lambda self: self._fake_hack_init_factory(),
+        takes_self=True,
+    ))
+
+    def _fake_hack_init_factory(self):
+        """I didn't ask for your judgement."""
+        super(LedbotUI, self).__init__()
 
     image_label = attr.ib(default=attr.Factory(
         lambda self: self._image_label_factory(),
@@ -39,6 +49,7 @@ class LedbotUI(QMainWindow):
         l.setBackgroundRole(QPalette.Base)
         l.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         l.setScaledContents(True)
+        l.setAutoFillBackground(True)
         return l
 
     def _scroll_area_factory(self, widget):
@@ -47,9 +58,12 @@ class LedbotUI(QMainWindow):
         s.setWidget(self.image_label)
         return s
 
-    def __attrs_post_init__(self):
-        super(LedbotUI, self).__init__()
+    movie = attr.ib(default=attr.Factory(
+        lambda self: QMovie(self),
+        takes_self=True,
+    ))
 
+    def __attrs_post_init__(self):
         self.setWindowTitle(self.window_title)
         self.resize(*self.window_size)
 
@@ -57,33 +71,48 @@ class LedbotUI(QMainWindow):
 
         self.fit_to_window()
 
-    def image(self, filename: str, is_animation: bool=None):
-        if is_animation is None:
-            _, ext = os.path.splitext(filename)
-            is_animation = ext.lower() in ['.gif']
+    def play(self, filename: str):
+        log.info('Play: %s', filename)
 
-        log.info('Image: %s is_animation=%s', filename, is_animation)
+        _, ext = os.path.splitext(filename)
+        is_animation = ext.lower() in ['.gif']
+        is_animation = True
 
         if is_animation:
-            movie = QMovie(filename)
-            self.image_label.setMovie(movie)
-            movie.start()
+            self.play_movie(filename)
         else:
-            image = QImage(filename)
-            if image.isNull():
-                log.error('Could not load image=%s', filename)
-                raise ValueError(filename)
-            self.image_label.setPixmap(QPixmap.fromImage(image))
+            self.play_image(filename)
 
         self.scale_factor = 1.0
         self.image_label.adjustSize()
 
-    def scale_to_normal_size(self):
+    def play_image(self, filename: str):
+        log.info('Play image: %s', filename)
+        self.movie.stop()
+
+        image = QImage(filename)
+        if image.isNull():
+            log.error('Could not load image=%s', filename)
+            raise ValueError(filename)
+        pixmap = QPixmap.fromImage(image)
+
+        self.image_label.setPixmap(pixmap)
+
+    def play_movie(self, filename: str):
+        log.info('Play movie: %s', filename)
+        self.movie.stop()
+
+        self.movie.setFileName(filename)
+
+        self.image_label.setMovie(self.movie)
+        self.movie.start()
+
+    def normal_size(self):
         self.scroll_area.setWidgetResizable(False)
         self.image_label.adjustSize()
         self.scale_factor = 1.0
 
-    def scale_to_fit_window(self):
+    def fit_to_window(self):
         self.scroll_area.setWidgetResizable(True)
 
     def scale_image(self, factor: float=1.0, relative: bool=True):
@@ -93,29 +122,36 @@ class LedbotUI(QMainWindow):
 
         native_size = self.image_label.pixmap().size()
         scaled_size = native_size * self.scale_factor
+
         self.image_label.resize(self.scale_factor * self.image_label.pixmap().size())
 
 
-if __name__ == '__main__':
-    import sys
+def init() -> (QApplication, asyncio.AbstractEventLoop):
+    app = QApplication([])
+    loop = quamash.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+    return app, loop
 
-    app = QApplication(sys.argv)
+
+async def main(app: QApplication, loop: asyncio.AbstractEventLoop):
     ui = LedbotUI()
     ui.show()
 
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop) # NEW must set the event loop
+    await demo(ui)
 
-    async def run(app: QApplication, loop: asyncio.AbstractEventLoop):
-        import glob
+    return ui
 
-        images = glob.glob(os.path.expanduser('./images/*.*'))
-        for img in images:
-            log.info('img=%s', img)
-            ui.image(img)
-            await asyncio.sleep(2)
 
+async def demo(ui: LedbotUI):
+    await asyncio.sleep(0.5)
+    images = glob.glob(os.path.expanduser('./images/*.*'))
+    for img in images:
+        ui.play(img)
+        await asyncio.sleep(2)
+
+
+if __name__ == '__main__':
+    app, loop = init()
+    fut = main(app, loop)
     with loop:
-        fut = run(app, loop)
         loop.run_until_complete(fut)
-
