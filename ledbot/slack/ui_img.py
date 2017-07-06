@@ -44,6 +44,11 @@ class LedbotUI(QMainWindow):
         takes_self=True,
     ))
 
+    movie = attr.ib(default=attr.Factory(
+        lambda self: self._movie_factory(),
+        takes_self=True,
+    ))
+
     def _image_label_factory(self):
         l = QLabel()
         l.setBackgroundRole(QPalette.Base)
@@ -58,10 +63,10 @@ class LedbotUI(QMainWindow):
         s.setWidget(self.image_label)
         return s
 
-    movie = attr.ib(default=attr.Factory(
-        lambda self: QMovie(self),
-        takes_self=True,
-    ))
+    def _movie_factory(self):
+        movie = QMovie(self)
+        movie.setCacheMode(QMovie.CacheAll)
+        return movie
 
     def __attrs_post_init__(self):
         self.setWindowTitle(self.window_title)
