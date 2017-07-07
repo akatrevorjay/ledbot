@@ -35,91 +35,19 @@ from . import aioslack
 
 from ..log import get_logger
 
-from .. import utils, debug
+from .. import di, utils, debug
 from ..utils import AttrDict
 
 from ..debug import pp, pf, see
 
 log = get_logger()
 
-SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
 slack_client = None
 mqttc = None
 
 
 @attr.s(repr=False)
-class RtmEvent(utils.ProxyMutableMapping):
-    event = attr.ib()
-    client = attr.ib()
-
-    def __attrs_post_init__(self):
-        utils.ProxyMutableMapping.__init__(self, self.event)
-
-    def __getattr__(self, attr):
-        try:
-            return self.event[attr]
-        except KeyError:
-            raise AttributeError(attr)
-
-    user = attr.ib(default=None)
-    channel = attr.ib(default=None)
-
-    @property
-    def user_id(self):
-        return self.event.get('user')
-
-    @property
-    def channel_id(self):
-        return self.event.get('channel')
-
-    @utils.lazyproperty
-    def event_ts(self):
-        return float(self.event['event_ts'])
-
-    @classmethod
-    async def from_aioslack_event(cls, event, client):
-        event = event.copy()
-
-        self = cls(
-            event=event,
-            client=client,
-        )
-
-        if client:
-            await self.populate()
-
-        return self
-
-    async def populate(self):
-        self.user = await self.client.find_user(self.user_id)
-        self.channel = await self.client.find_channel(self.channel_id)
-
-    def __repr__(self):
-        cls = self.__class__
-        message = self.get('message', {})
-        text = message.get('text')
-
-        user = self.user or self.event.get('username') or self.user_id
-        channel = self.channel or self.channel_id
-        team = self.event.get('team')
-
-        return f'<{cls.__name__} {user}@{channel}.{team} text={text}>'
-
-
-@attr.s(repr=False)
-class SlackMessage(RtmEvent):
-    ctx = attr.ib(default=attr.Factory(AttrDict))
-
-    def iter_attachments(self):
-        message = self.get('message', {})
-        attachments = message.get('attachments', [])
-        for attach in attachments:
-            yield Attachment(attach)
-
-    def iter_files(self):
-        file = self.event.get('file')
-        if file:
-            yield File(file)
+class SlackMessage(aioslack.RtmEvent):
 
     async def queue_to_play(self):
         log.debug('Trying to play %s', self)
@@ -155,67 +83,33 @@ async def queue_to_play(uri: yarl.URL, content_type: str='generic'):
     log.info('Queued buri=%s', buri)
 
 
-@attr.s(repr=False)
-class Attachment(utils.ProxyMutableMapping):
-    _store = attr.ib()
+@di.inject('config')
+async def ainit(config, loop=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
 
-    def __attrs_post_init__(self):
-        utils.ProxyMutableMapping.__init__(self, self._store)
-
-    def _get_generic_uri(self):
-        return self.get('from_url')
-
-    def get_uri(self) -> yarl.URL:
-        uri = self._get_generic_uri()
-        if not uri:
-            return
-
-        uri = yarl.URL(uri)
-        return uri
-
-
-@attr.s(repr=False)
-class File(utils.ProxyMutableMapping):
-    _store = attr.ib()
-
-    def __attrs_post_init__(self):
-        utils.ProxyMutableMapping.__init__(self, self._store)
-
-    def _get_image_uri(self):
-        return self.get('url_private')
-
-    def get_uri(self) -> yarl.URL:
-        uri = self._get_image_uri()
-        if not uri:
-            return
-
-        uri = yarl.URL(uri)
-        return uri
-
-
-async def ainit(loop):
     log.debug('init')
 
     global slack_client, mqttc
 
-    slack_client = aioslack.Client(SLACK_API_TOKEN)
+    slack_client = aioslack.Client(config.SLACK_API_TOKEN)
     slack_client.on('*')(_on_slack_all)
     slack_client.on('message')(_on_slack_message)
 
     mqttc = MQTTClient(client_id=log.name, loop=loop)
 
 
-async def start(loop):
+@di.inject('config')
+async def start(config, loop=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
     global slack_client, mqttc
 
-    mqtt_ret = await mqttc.connect('mqtt://localhost/')
-    log.debug('mqtt_ret=%s', mqtt_ret)
+    log.debug('Connecting to Slack and MQTT')
 
-    m = await mqttc.publish('up', log.name.encode())
-    log.debug('m=%s', m)
-
-    s_ret = await slack_client.start_ws_connection()
-    log.debug('s_ret=%s', s_ret)
+    await mqttc.connect(config.MQTT_URL)
+    await slack_client.start_ws_connection()
 
 
 async def _on_slack_all(event):
@@ -225,8 +119,5 @@ async def _on_slack_all(event):
 
 async def _on_slack_message(event):
     """Slack message faucet."""
-    msg = await SlackMessage.from_aioslack_event(event, slack_client)
-    log.debug('msg=%s', msg)
-
-    ret = await msg.queue_to_play()
-    log.debug('ret=%s', ret)
+    msg = await SlackMessage.from_aioslack_event(event.event, event.client)
+    await msg.queue_to_play()

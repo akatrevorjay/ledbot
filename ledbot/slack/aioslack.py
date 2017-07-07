@@ -3,6 +3,7 @@
 import asyncio
 import types
 import collections
+import functools
 import itertools
 import json
 import time
@@ -14,6 +15,7 @@ import aiohttp
 import websockets
 import attr
 import aiorwlock
+import yarl
 from rwlock.rwlock import RWLock
 
 from functools import singledispatch
@@ -156,6 +158,122 @@ class State:
 
 
 @attr.s(repr=False)
+class RtmEvent(utils.ProxyMutableMapping):
+    event = attr.ib()
+    client = attr.ib()
+
+    ctx = attr.ib(default=attr.Factory(utils.AttrDict))
+
+    def __attrs_post_init__(self):
+        utils.ProxyMutableMapping.__init__(self, self.event)
+
+    def iter_attachments(self):
+        message = self.get('message', {})
+        attachments = message.get('attachments', [])
+        for attach in attachments:
+            yield Attachment(attach)
+
+    def iter_files(self):
+        file = self.event.get('file')
+        if file:
+            yield File(file)
+
+    def __getattr__(self, attr):
+        try:
+            return self.event[attr]
+        except KeyError:
+            raise AttributeError(attr)
+
+    user = attr.ib(default=None)
+    channel = attr.ib(default=None)
+
+    @property
+    def user_id(self):
+        return self.event.get('user')
+
+    @property
+    def channel_id(self):
+        return self.event.get('channel')
+
+    @utils.lazyproperty
+    def event_ts(self):
+        return float(self.event['event_ts'])
+
+    @utils.lazyproperty
+    def full_type(self):
+        parts = [self.event['type'], self.event.get('subtype')]
+        parts = [p for p in parts if p]
+        return '.'.join(parts)
+
+    @classmethod
+    async def from_aioslack_event(cls, event, client):
+        event = event.copy()
+
+        self = cls(
+            event=event,
+            client=client,
+        )
+
+        if client:
+            await self.populate()
+
+        return self
+
+    async def populate(self):
+        self.user = await self.client.find_user(self.user_id)
+        self.channel = await self.client.find_channel(self.channel_id)
+
+    def __repr__(self):
+        cls = self.__class__
+        message = self.get('message', {})
+        text = message.get('text')
+
+        user = self.user or self.event.get('username') or self.user_id
+        channel = self.channel or self.channel_id
+        team = self.event.get('team')
+
+        return f'<{cls.__name__} [{self.full_type}] {user}@{channel}.{team} text={text}>'
+
+
+@attr.s(repr=False)
+class Attachment(utils.ProxyMutableMapping):
+    _store = attr.ib()
+
+    def __attrs_post_init__(self):
+        utils.ProxyMutableMapping.__init__(self, self._store)
+
+    def _get_generic_uri(self):
+        return self.get('from_url')
+
+    def get_uri(self) -> yarl.URL:
+        uri = self._get_generic_uri()
+        if not uri:
+            return
+
+        uri = yarl.URL(uri)
+        return uri
+
+
+@attr.s(repr=False)
+class File(utils.ProxyMutableMapping):
+    _store = attr.ib()
+
+    def __attrs_post_init__(self):
+        utils.ProxyMutableMapping.__init__(self, self._store)
+
+    def _get_image_uri(self):
+        return self.get('url_private')
+
+    def get_uri(self) -> yarl.URL:
+        uri = self._get_image_uri()
+        if not uri:
+            return
+
+        uri = yarl.URL(uri)
+        return uri
+
+
+@attr.s(repr=False)
 class Client:
     PRODUCER_DELAY = 0.5
     BASE_URI = 'https://slack.com/api'
@@ -172,6 +290,11 @@ class Client:
 
     state = attr.ib(default=attr.Factory(
         lambda self: State(self),
+        takes_self=True,
+    ))
+
+    message_factory = attr.ib(default=attr.Factory(
+        lambda self: functools.partial(RtmEvent, client=self),
         takes_self=True,
     ))
 
@@ -291,8 +414,6 @@ class Client:
             if len(done) == len(tasks):
                 time.sleep(0.1)
 
-    message_factory = attr.ib(default=utils.AttrDict)
-
     async def consumer(self, message_raw):
         try:
             msg = json.loads(message_raw)
@@ -301,18 +422,15 @@ class Client:
             raise
 
         msg = self.message_factory(msg)
-
         try:
-            msg_type = msg['type']
-            if 'subtype' in msg:
-                msg_type = '%s.%s' % (msg_type, msg['subtype'])
+            msg.full_type
         except KeyError:
             log.exception('Received bad message; "type" key(s) missing: msg=%r', msg)
 
-        log.info('received "%s"', msg_type)
+        log.info('[%s] --> received message=%s', msg.full_type, msg)
 
         handlers = itertools.chain(
-            self.handlers[msg_type],
+            self.handlers[msg.full_type],
             self.handlers[msg['type']],
             self.handlers['*'],
         )

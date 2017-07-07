@@ -20,28 +20,35 @@ log = get_logger()
 mpv_log = get_logger('%s.mpv' % log.name)
 
 
+def mpv_log_handler(loglevel, component, message):
+    mpv_log.info('[%s] %s: %s', loglevel, component, message)
+
+
 def mpv_factory() -> mpv.MPV:
-
-    def mpv_log_handler(loglevel, component, message):
-        mpv_log.info('[%s] %s: %s', loglevel, component, message)
-
     player = mpv.MPV(
         log_handler=mpv_log_handler,
         ytdl=True,
         input_default_bindings=True,
         input_vo_keyboard=True,
         vo='opengl',
-        # loop='inf',
         fullscreen=False,
-        # window_scale=1.0,
+        keepaspect=False,
         geometry='160x320+0+0',
         # autofit='320:160',
-        keepaspect=False,
-        # loop='inf',
         loop_file=True,
     )
 
     return player
+
+
+async def play(player: mpv.MPV, uri: str, loop=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    log.info('Hitting play on uri=%s', uri)
+    await loop.run_in_executor(None, player.play, uri)
+
+    log.info('Playing should have started for uri=%s', uri)
 
 
 async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
@@ -53,28 +60,13 @@ async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
         packet = message.publish_packet
         log.info("[%s] -> %s", packet.variable_header.topic_name, packet.payload.data)
 
-        t = packet.variable_header.topic_name
-        if not t.startswith('ledbot/play'):
-            return
+        topic = packet.variable_header.topic_name
+        data = packet.payload.data  # type: bytearray
 
-        d = packet.payload.data  # type: bytearray
-        url = d.decode()
+        if topic.startswith('ledbot/play'):
+            uri = data.decode()
 
-        log.info('Playing: %s', url)
-
-        # player.playlist_clear()
-        # for _ in range(5):
-        #     player.playlist_append(url)
-        # player.playlist_pos = 0
-
-        fut = loop.run_in_executor(None, player.play, url)
-        await fut
-
-        # log.info('Waiting for playback: %s', url)
-        # fut = loop.run_in_executor(None, player.wait_for_playback)
-        # await fut
-
-        log.info('Done playing: %s', url)
+            await play(player, uri)
 
     try:
         await client.connect('mqtt://localhost/')
