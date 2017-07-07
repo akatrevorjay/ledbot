@@ -12,7 +12,7 @@ from sanic_openapi import swagger_blueprint, openapi_blueprint
 
 from . import blueprints
 
-from . import di, signals, get_logger, utils, service, mqtt
+from . import di, signals, get_logger, utils, service, mqtt, slack
 
 log = get_logger()
 
@@ -84,9 +84,12 @@ def init(argv):
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-async def ainit():
+async def ainit(loop):
     log.debug('ainit')
+
     await mqtt.mqtt_client_connect()
+
+    await slack.ainit(loop)
 
 
 @di.inject('config')
@@ -96,10 +99,15 @@ def main(config, argv):
     loop = asyncio.get_event_loop()
     loop.set_debug(config.DEBUG)
 
-    loop.run_until_complete(ainit())
+    loop.run_until_complete(ainit(loop))
 
-    fut = run()
-    loop.run_until_complete(fut)
+    futs = [
+        run(),
+        slack.run(),
+    ]
+
+    f = asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
+    loop.run_until_complete(f)
 
     loop.close()
 

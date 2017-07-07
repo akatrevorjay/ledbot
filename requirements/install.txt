@@ -25,6 +25,8 @@ cachetools
 python-mpv
 rwlock
 setproctitle
+sanic
+sanic-openapi
 #sortedcontainers
 six
 yarl
