@@ -37,21 +37,9 @@ def mpv_factory() -> mpv.MPV:
         geometry='160x320+0+0',
         # autofit='320:160',
         keepaspect=False,
+        # loop='inf',
+        loop_file=True,
     )
-
-    # # Property access, these can be changed at runtime
-    # @player.property_observer('time-pos')
-    # def mpv_time_observer(_name, value):
-    #     # Here, _value is either None if nothing is playing or a float containing
-    #     # fractional seconds since the beginning of the file.
-    #     mpv_log.info('Now playing at %.2fs', value)
-
-    # player.fullscreen = False
-
-    # player.loop = 'inf'
-
-    # Option access, in general these require the core to reinitialize
-    # player['vo'] = 'opengl'
 
     return player
 
@@ -75,16 +63,16 @@ async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
         log.info('Playing: %s', url)
 
         # player.playlist_clear()
-        # player.playlist_append(url)
+        # for _ in range(5):
+        #     player.playlist_append(url)
         # player.playlist_pos = 0
 
         fut = loop.run_in_executor(None, player.play, url)
         await fut
 
-        log.info('Waiting for playback: %s', url)
-
-        fut = loop.run_in_executor(None, player.wait_for_playback)
-        await fut
+        # log.info('Waiting for playback: %s', url)
+        # fut = loop.run_in_executor(None, player.wait_for_playback)
+        # await fut
 
         log.info('Done playing: %s', url)
 
@@ -105,14 +93,6 @@ async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
         await client.disconnect()
 
 
-# async def demo(ui: LedbotUI):
-#     await asyncio.sleep(0.5)
-#     images = glob.glob(os.path.expanduser('./images/*.*'))
-#     for img in images:
-#         ui.play(img)
-#         await asyncio.sleep(2)
-
-
 def init():
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -131,13 +111,7 @@ def main():
     fut = ainit(loop)
     loop.run_until_complete(fut)
 
-    futs = [mqtt_client_loop(loop)]
-
-    fut = asyncio.gather(*futs)
-
-    # import aiomonitor
-    # with aiomonitor.start_monitor(loop=loop):
-    #     loop.run_until_complete(fut)
+    fut = mqtt_client_loop(loop)
     loop.run_until_complete(fut)
 
     loop.close()

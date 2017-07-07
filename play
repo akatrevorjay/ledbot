@@ -5,6 +5,4 @@ hbmqtt_pub() {
     python lib/hbmqtt/scripts/pub_script.py "$@"
 }
 
-hbmqtt_pub --url mqtt://localhost -t play/generic -m 'https://1d4chan.org/images/thumb/5/57/Youngeisenhorn.jpg/200px-Youngeisenhorn.jpg'
-
-hbmqtt_pub --url mqtt://localhost -t play/generic -m 'https://www.youtube.com/watch?v=MPAFah0iTDM'
+hbmqtt_pub --url mqtt://localhost -t ledbot/play/cli -m "$1"
