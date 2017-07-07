@@ -7,10 +7,11 @@ import time
 import sys
 import glob
 
-import hbmqtt.client
+import aiohttp
+import mpv
+
 from hbmqtt.client import MQTTClient
 from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
-import mpv
 
 from ..log import get_logger
 from .. import utils
@@ -54,6 +55,7 @@ async def play(player: mpv.MPV, uri: str, loop=None):
 async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
     player = mpv_factory()
     client = MQTTClient(client_id=log.name, loop=loop)
+    session = aiohttp.ClientSession()
 
     async def fetch_and_play_item():
         message = await client.deliver_message()
@@ -65,6 +67,13 @@ async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
 
         if topic.startswith('ledbot/play'):
             uri = data.decode()
+
+            async with session.get(uri) as resp:
+                resp.raise_for_status()
+
+                if resp.content_type.startswith('text'):
+                    log.info('Not playing content_type=%s', resp.content_type)
+                    return
 
             await play(player, uri)
 
@@ -80,7 +89,11 @@ async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
         await client.subscribe(topics)
 
         while True:
-            await fetch_and_play_item()
+            try:
+                await fetch_and_play_item()
+            except Exception:
+                log.exception('Failed to fetch and play item')
+
     finally:
         await client.disconnect()
 
