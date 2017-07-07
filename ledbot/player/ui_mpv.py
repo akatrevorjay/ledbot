@@ -7,6 +7,7 @@ import glob
 
 import aiohttp
 import mpv
+import yarl
 
 from hbmqtt.client import MQTTClient
 from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
@@ -66,8 +67,18 @@ class Player:
         await self.loop.run_in_executor(None, self.player.play, uri)
         log.info('Playing should have started for uri=%s', uri)
 
+    whitelisted_domains = [
+        'www.youtube.com',
+        'youtube.com',
+        'youtu.be',
+    ]
+
     async def check_uri(self, uri: str):
         log.error('Checking uri=%s', uri)
+
+        uri = yarl.URL(uri)
+        if uri.host in self.whitelisted_domains:
+            return True
 
         # Bare minimum to ensure it's likely playable
         async with self.session.get(uri) as resp:  # type: aiohttp.ClientResponse
