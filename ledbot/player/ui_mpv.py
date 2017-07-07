@@ -1,0 +1,117 @@
+import asyncio
+import os
+import attr
+import time
+import sys
+import glob
+
+import aiohttp
+import mpv
+
+from hbmqtt.client import MQTTClient
+from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
+
+from .. import di, utils, debug
+from ..log import get_logger
+
+log = get_logger()
+mpv_log = get_logger('%s.mpv' % log.name)
+
+
+def mpv_log_handler(loglevel, component, message):
+    mpv_log.info('[%s] %s: %s', loglevel, component, message)
+
+
+@attr.s
+class Player:
+    player = attr.ib(default=attr.Factory(
+        lambda self: self._mpv_factory(),
+        takes_self=True,
+    ))
+
+    session = attr.ib(default=attr.Factory(aiohttp.ClientSession))
+
+    loop = attr.ib(default=attr.Factory(asyncio.get_event_loop))
+
+    def _mpv_factory() -> mpv.MPV:
+        player = mpv.MPV(
+            log_handler=mpv_log_handler,
+            ytdl=True,
+            input_default_bindings=True,
+            input_vo_keyboard=True,
+            vo='opengl',
+            fullscreen=False,
+            keepaspect=False,
+            geometry='160x320+0+0',
+            # autofit='320:160',
+            loop_file=True,
+        )
+
+        return player
+
+    async def play_uri(self, uri: str, check=True):
+        if check:
+            ok = await self.check_uri(uri)
+            if not ok:
+                log.info('Failed check for uri=%s; not playing this.', uri)
+                return
+
+        log.info('Hitting play on uri=%s', uri)
+        await loop.run_in_executor(None, player.play, uri)
+        log.info('Playing should have started for uri=%s', uri)
+
+    async def check_uri(self, uri: str):
+        log.error('Checking uri=%s', uri)
+
+        # Bare minimum to ensure it's likely playable
+        async with self.session.get(uri) as resp:  # type: aiohttp.ClientResponse
+            try:
+                resp.raise_for_status()
+            except Exception as exc:
+                log.error('Failed to get uri=%s: %s', uri, exc)
+                return False
+
+            if resp.content_type.startswith('text'):
+                log.info('Not playing content_type=%s', resp.content_type)
+                return False
+
+    async def on_mqtt_event(self, topic: str, data: bytearray):
+        uri = data.decode()
+
+        await self.play(player, uri)
+
+
+@di.inject('config')
+async def mqtt_client_loop(config, loop: asyncio.AbstractEventLoop=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    client = MQTTClient(client_id=log.name, loop=loop)
+    player = Player(loop=loop)
+
+    try:
+        await client.connect('mqtt://localhost/')
+
+        topics = [
+            # ('$SYS/broker/uptime', QOS_1),
+            # ('$SYS/broker/load/#', QOS_2),
+            ('ledbot/play/#', QOS_0),
+        ]
+        await client.subscribe(topics)
+
+        while True:
+            message = await client.deliver_message()
+            packet = message.publish_packet
+            topic = packet.variable_header.topic_name
+            data = packet.payload.data  # type: bytearray
+
+            log.info("[%s] -> %s", topic, data)
+
+            try:
+                if topic.startswith('ledbot/play'):
+                    await player.on_mqtt_event(topic, data)
+            except Exception:
+                log.exception('[%s] Failed to play item: data=%s', topic, data)
+
+    finally:
+        await client.disconnect()
