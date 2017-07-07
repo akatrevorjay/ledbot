@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 
+import asyncio
+import uvloop
+
 from . import ui_mpv
+
+from ..log import get_logger
+
+log = get_logger()
 
 
 def init():
@@ -13,9 +20,6 @@ def main():
 
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
-
-    fut = ui_mpv.ainit(loop)
-    loop.run_until_complete(fut)
 
     fut = ui_mpv.main(loop)
     loop.run_until_complete(fut)

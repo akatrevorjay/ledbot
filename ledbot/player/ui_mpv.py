@@ -33,7 +33,7 @@ class Player:
 
     loop = attr.ib(default=attr.Factory(asyncio.get_event_loop))
 
-    def _mpv_factory() -> mpv.MPV:
+    def _mpv_factory(self) -> mpv.MPV:
         player = mpv.MPV(
             log_handler=mpv_log_handler,
             ytdl=True,
@@ -57,7 +57,7 @@ class Player:
                 return
 
         log.info('Hitting play on uri=%s', uri)
-        await loop.run_in_executor(None, player.play, uri)
+        await self.loop.run_in_executor(None, self.player.play, uri)
         log.info('Playing should have started for uri=%s', uri)
 
     async def check_uri(self, uri: str):
@@ -75,14 +75,35 @@ class Player:
                 log.info('Not playing content_type=%s', resp.content_type)
                 return False
 
+        return True
+
     async def on_mqtt_event(self, topic: str, data: bytearray):
         uri = data.decode()
+        await self.play_uri(uri)
 
-        await self.play(player, uri)
+
+async def mqtt_client_loop(client: MQTTClient, player: Player):
+
+    async def _on(message):
+        packet = message.publish_packet
+        topic = packet.variable_header.topic_name
+        data = packet.payload.data  # type: bytearray
+
+        log.info("[%s] -> %s", topic, data)
+
+        try:
+            if topic.startswith('ledbot/play'):
+                await player.on_mqtt_event(topic, data)
+        except Exception:
+            log.exception('[%s] Failed to play item: data=%s', topic, data)
+
+    while True:
+        message = await client.deliver_message()
+        await _on(message)
 
 
 @di.inject('config')
-async def mqtt_client_loop(config, loop: asyncio.AbstractEventLoop=None):
+async def main(config, loop=None):
     if loop is None:
         loop = asyncio.get_event_loop()
 
@@ -99,19 +120,7 @@ async def mqtt_client_loop(config, loop: asyncio.AbstractEventLoop=None):
         ]
         await client.subscribe(topics)
 
-        while True:
-            message = await client.deliver_message()
-            packet = message.publish_packet
-            topic = packet.variable_header.topic_name
-            data = packet.payload.data  # type: bytearray
-
-            log.info("[%s] -> %s", topic, data)
-
-            try:
-                if topic.startswith('ledbot/play'):
-                    await player.on_mqtt_event(topic, data)
-            except Exception:
-                log.exception('[%s] Failed to play item: data=%s', topic, data)
+        await mqtt_client_loop(client, player)
 
     finally:
         await client.disconnect()
