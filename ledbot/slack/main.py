@@ -19,19 +19,14 @@ def main():
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
 
-    fut = queue.init(loop)
+    fut = queue.ainit(loop)
     loop.run_until_complete(fut)
 
-    futs = [
-        queue.slack_client.start_ws_connection(),
-        queue.extractor_worker(loop),
-    ]
+    fut = queue.start(loop)
 
-    fut = asyncio.gather(*futs)
-
-    import aiomonitor
-    with aiomonitor.start_monitor(loop=loop):
-        loop.run_until_complete(fut)
+    # import aiomonitor
+    # with aiomonitor.start_monitor(loop=loop):
+    loop.run_until_complete(fut)
 
     loop.close()
 

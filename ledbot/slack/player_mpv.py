@@ -20,7 +20,7 @@ log = get_logger()
 mpv_log = get_logger('%s.mpv' % log.name)
 
 
-def mpv_factory() -> MPV:
+def mpv_factory() -> mpv.MPV:
 
     def mpv_log_handler(loglevel, component, message):
         mpv_log.info('[%s] %s: %s', loglevel, component, message)
@@ -51,7 +51,7 @@ def mpv_factory() -> MPV:
 
 async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
     player = mpv_factory()
-    client = MQTTClient(loop=loop)
+    client = MQTTClient(client_id=log.name, loop=loop)
 
     async def fetch_and_play_item():
         message = await client.deliver_message()
@@ -74,15 +74,13 @@ async def mqtt_client_loop(loop: asyncio.AbstractEventLoop):
             await fut
 
     try:
-        await client.connect(
-            uri='mqtt://localhost',
-        )
+        await client.connect('mqtt://localhost/')
 
         # client.subscribe([
         topics = [
-            ('$SYS/broker/uptime', QOS_1),
-            ('$SYS/broker/load/#', QOS_2),
-            ('play/#', QOS_0),
+            # ('$SYS/broker/uptime', QOS_1),
+            # ('$SYS/broker/load/#', QOS_2),
+            ('ledbot/play/#', QOS_0),
         ]
         await client.subscribe(topics)
 

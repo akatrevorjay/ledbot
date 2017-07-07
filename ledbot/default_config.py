@@ -50,8 +50,8 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO',
-        # 'level': 'DEBUG',
+        # 'level': 'INFO',
+        'level': 'DEBUG',
     },
     'loggers': {
         'ledbot': dict(level='DEBUG', propogate=True),

@@ -9,7 +9,7 @@ import os
 import re
 import itertools
 
-# import asyncio
+import asyncio
 # import asyncio.queues
 # import asyncio.locks
 # import asyncio.events
@@ -28,6 +28,9 @@ import kawaiisync
 import yarl
 import youtube_dl
 
+from hbmqtt.client import MQTTClient
+from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
+
 from . import aioslack
 
 from ..log import get_logger
@@ -40,75 +43,8 @@ from ..debug import pp, pf, see
 log = get_logger()
 
 SLACK_API_TOKEN = os.environ['SLACK_API_TOKEN']
-slack_client = aioslack.Client(SLACK_API_TOKEN)
-
-
-@slack_client.on('*')
-async def _on_slack_all(event):
-    """Slack debug handler for all events."""
-    log.debug("Event: %s", pf(event))
-
-
-@slack_client.on('file_shared')
-async def _on_slack_message(event):
-    """Slack file faucet."""
-    """
-    {'event_ts': '1499153563.056233',
-    'file': {'id': 'F63F10Z6W'},
-    'file_id': 'F63F10Z6W',
-    'ts': '1499153563.056233',
-    'type': 'file_shared',
-    'user_id': 'U28T1J8GH'}
-    """
-
-    msg = await SlackMessage.from_aioslack_event(event, slack_client)
-    await faucet_q(msg)
-
-
-@slack_client.on('message')
-async def _on_slack_message(event):
-    """Slack message faucet."""
-
-    msg = await SlackMessage.from_aioslack_event(event, slack_client)
-    await faucet_q(msg)
-
-
-RE_URL = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
-"""
-Pipeline:
-    Slack  ->  Extract  ->  Download  ->  Queue  ->  Play
-"""
-
-faucet_q = None
-download_q = None
-play_q = None
-
-
-async def init(loop):
-    log.debug('init')
-
-    global faucet_q, download_q, play_q
-    faucet_q = kawaiisync.BufferedChannel(maxsize=5, loop=loop)
-    download_q = kawaiisync.BufferedChannel(maxsize=5, loop=loop)
-    play_q = kawaiisync.BufferedChannel(maxsize=5, loop=loop)
-
-    # workers = [
-    #    extractor_worker(in_q=faucet_q, loop=loop)
-    # ]
-
-
-async def extractor_worker(loop):
-
-    async def _work(msg: SlackMessage):
-        log.debug('msg=%s', msg)
-
-        await msg.play()
-
-    async for msg in faucet_q:
-        try:
-            await _work(msg)
-        except Exception:
-            log.exception('Well fuck')
+slack_client = None
+mqttc = None
 
 
 @attr.s(repr=False)
@@ -160,7 +96,8 @@ class RtmEvent(utils.ProxyMutableMapping):
 
     def __repr__(self):
         cls = self.__class__
-        text = self.get('text')
+        message = self.get('message', {})
+        text = message.get('text')
 
         user = self.user or self.event.get('username') or self.user_id
         channel = self.channel or self.channel_id
@@ -174,7 +111,7 @@ class SlackMessage(RtmEvent):
     ctx = attr.ib(default=attr.Factory(AttrDict))
 
     def iter_attachments(self):
-        message = self.event.get('message', {})
+        message = self.get('message', {})
         attachments = message.get('attachments', [])
         for attach in attachments:
             yield Attachment(attach)
@@ -184,67 +121,52 @@ class SlackMessage(RtmEvent):
         if file:
             yield File(file)
 
-    async def play(self):
+    async def queue_to_play(self):
+        log.debug('Trying to play %s', self)
+
         for attach in itertools.chain(self.iter_files(), self.iter_attachments()):
-            player = make_player(attach, msg=self)
-            if not player:
+            log.debug('Checking attachment=%s', attach)
+
+            uri = attach.get_uri()
+            if not uri:
                 continue
 
-            log.debug("Attachment: %r player=%r", attach, player)
+            log.debug("Playing attachment=%s", attach)
+            await queue_to_play(uri)
+            return
 
-            await attach.download()
-
-            log.debug('I would play now')
-            break
+        log.error('Not playable %s', self)
 
 
-@attr.s
-class Downloadable(utils.ProxyMutableMapping, metaclass=abc.ABCMeta):
-    _store = attr.ib(repr=False)
+async def queue_to_play(uri: yarl.URL, content_type: str='generic'):
+    global mqttc
 
-    content: str = attr.ib(default=None, repr=False)
-    content_type: str = attr.ib(default=None)
-    content_length: int = attr.ib(default=None)
-    is_downloaded: bool = attr.ib(validator=attr.validators.instance_of(bool))
+    log.debug("Queuing uri=%s content_type=%s", uri, content_type)
+
+    topic = 'ledbot/play/%s' % content_type
+
+    buri = str(uri).encode()
+    log.debug("topic=%s buri=%s", topic, buri)
+
+    m = await mqttc.publish(topic, buri, qos=QOS_0)
+
+    log.debug('m=%s', m)
+
+    log.info('Queued buri=%s', buri)
+
+
+@attr.s(repr=False)
+class Attachment(utils.ProxyMutableMapping):
+    _store = attr.ib()
 
     def __attrs_post_init__(self):
         utils.ProxyMutableMapping.__init__(self, self._store)
 
-    @abc.abstractproperty
-    def uri(self) -> yarl.URL:
-        pass
+    def _get_generic_uri(self):
+        return self.get('from_url')
 
-    @property
-    def is_downloaded(self):
-        return self.content is not None
-
-    @utils.lazyclassproperty
-    def _session(self) -> aiohttp.ClientSession:
-        return aiohttp.ClientSession()
-
-    async def download(self, session: aiohttp.ClientSession=None):
-        if session is None:
-            session = self._session
-
-        log.info('Downloading %s', self)
-
-        async with session.get(self.uri) as resp:  # type: aiohttp.ClientResponse
-            resp.raise_for_status()
-
-            # TODO Check content_length
-            self.content = await resp.read()
-            self.content_length = resp.content_length
-            self.content_type = resp.content_type
-
-        log.info('Downloaded %s', self)
-
-
-@attr.s
-class Attachment(Downloadable, utils.AttrDict):
-
-    @utils.lazyproperty
-    def uri(self) -> yarl.URL:
-        uri = self.get('image_url')
+    def get_uri(self) -> yarl.URL:
+        uri = self._get_generic_uri()
         if not uri:
             return
 
@@ -252,12 +174,18 @@ class Attachment(Downloadable, utils.AttrDict):
         return uri
 
 
-@attr.s
-class File(utils.AttrDict, Downloadable):
+@attr.s(repr=False)
+class File(utils.ProxyMutableMapping):
+    _store = attr.ib()
 
-    @utils.lazyproperty
-    def uri(self) -> yarl.URL:
-        uri = self.get('url_private')
+    def __attrs_post_init__(self):
+        utils.ProxyMutableMapping.__init__(self, self._store)
+
+    def _get_image_uri(self):
+        return self.get('url_private')
+
+    def get_uri(self) -> yarl.URL:
+        uri = self._get_image_uri()
         if not uri:
             return
 
@@ -265,57 +193,40 @@ class File(utils.AttrDict, Downloadable):
         return uri
 
 
-@attr.s
-class Player:
-    uri = attr.ib()
+async def ainit(loop):
+    log.debug('init')
+
+    global slack_client, mqttc
+
+    slack_client = aioslack.Client(SLACK_API_TOKEN)
+    slack_client.on('*')(_on_slack_all)
+    slack_client.on('message')(_on_slack_message)
+
+    mqttc = MQTTClient(client_id=log.name, loop=loop)
 
 
-class YoutubePlayer(Player):
-    service_names = ['youtube']
+async def start(loop):
+    global slack_client, mqttc
 
-    @classmethod
-    def is_supported(cls, attachment, msg: SlackMessage) -> bool:
-        service_name = attachment.get('service_name', '').lower()
-        if not service_name:
-            return False
+    mqtt_ret = await mqttc.connect('mqtt://localhost/')
+    log.debug('mqtt_ret=%s', mqtt_ret)
 
-        return service_name in cls.service_names
+    m = await mqttc.publish('up', log.name.encode())
+    log.debug('m=%s', m)
 
-    @classmethod
-    def from_attachment(cls, attachment, msg: SlackMessage):
-        uri = attachment['title_link']
-        self = cls(uri=uri)
-        return self
+    s_ret = await slack_client.start_ws_connection()
+    log.debug('s_ret=%s', s_ret)
 
 
-class ImagePlayer(Player):
-
-    @classmethod
-    def is_supported(cls, attachment, msg: SlackMessage) -> bool:
-        image_uri = attachment.get('image_url')
-        return bool(image_uri)
-
-    @classmethod
-    def from_attachment(cls, attachment, msg: SlackMessage):
-        uri = attachment['image_url']
-        self = cls(uri=uri)
-        return self
+async def _on_slack_all(event):
+    """Slack debug handler for all events."""
+    log.debug("Event: %s", pf(event))
 
 
-# Priority
-PLAYERS = [YoutubePlayer, ImagePlayer]
+async def _on_slack_message(event):
+    """Slack message faucet."""
+    msg = await SlackMessage.from_aioslack_event(event, slack_client)
+    log.debug('msg=%s', msg)
 
-
-def iter_supported_players(attachment, msg: SlackMessage):
-    log.debug(f"Finding supported players for attachment={attachment} msg={msg}")
-    for factory in PLAYERS:
-        if not factory.is_supported(attachment, msg=msg):
-            continue
-        yield factory
-
-
-def make_player(attachment, msg: SlackMessage):
-    log.debug(f"Making player for attachment={attachment} msg={msg}")
-    for factory in iter_supported_players(attachment, msg=msg):
-        inst = factory.from_attachment(attachment, msg=msg)
-        return inst
+    ret = await msg.queue_to_play()
+    log.debug('ret=%s', ret)
