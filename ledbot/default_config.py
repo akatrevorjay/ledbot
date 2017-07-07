@@ -58,3 +58,6 @@ LOGGING = {
     }
 }
 
+MPV_VO_DRIVER = 'opengl'
+
+PLAYER_GEOMETRY = (160, 320)

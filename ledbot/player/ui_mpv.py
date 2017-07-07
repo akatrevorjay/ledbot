@@ -33,18 +33,24 @@ class Player:
 
     loop = attr.ib(default=attr.Factory(asyncio.get_event_loop))
 
-    def _mpv_factory(self) -> mpv.MPV:
+    @di.inject('config')
+    def _mpv_factory(self, config):
         player = mpv.MPV(
             log_handler=mpv_log_handler,
             ytdl=True,
             input_default_bindings=True,
             input_vo_keyboard=True,
-            vo='opengl',
-            fullscreen=False,
+            cursor_autohide=250,
+            vo=config.MPV_VO_DRIVER,
             keepaspect=False,
-            geometry='160x320+0+0',
-            # autofit='320:160',
+            keepaspect_window=False,
+            x11_name=config.APP_NAME,
+            fullscreen=False,
+            geometry='%sx%s' % config.PLAYER_GEOMETRY,
+            # force_window_position=True,
             loop_file=True,
+            cache=True,
+            cache_secs=30,
         )
 
         return player
