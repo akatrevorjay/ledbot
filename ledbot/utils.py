@@ -140,7 +140,10 @@ def set_proc_title(title=None, base='ledbot'):
     if not title:
         title = _namespace_from_calling_context()
 
-    title = '%s.%s' % (base, title)
+    parts = [base, title]
+    parts = [p for p in parts if p]
+    title = '.'.join(parts)
+
     setproctitle.setproctitle(title)
 
 

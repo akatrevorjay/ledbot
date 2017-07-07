@@ -11,7 +11,7 @@ import mpv
 from hbmqtt.client import MQTTClient
 from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
 
-from .. import di, utils, debug
+from .. import di, utils, debug, mqtt
 from ..log import get_logger
 
 log = get_logger()
@@ -88,6 +88,10 @@ class Player:
         await self.play_uri(uri)
 
 
+di.register_factory(Player, Player, scope='global')
+
+
+@di.inject(MQTTClient, Player)
 async def mqtt_client_loop(client: MQTTClient, player: Player):
 
     async def _on(message):
@@ -108,25 +112,13 @@ async def mqtt_client_loop(client: MQTTClient, player: Player):
         await _on(message)
 
 
-@di.inject('config')
-async def main(config, loop=None):
-    if loop is None:
-        loop = asyncio.get_event_loop()
+@di.inject(MQTTClient, Player)
+async def main(client: MQTTClient, player: Player):
+    topics = [
+        # ('$SYS/broker/uptime', QOS_1),
+        # ('$SYS/broker/load/#', QOS_2),
+        ('ledbot/play/#', QOS_0),
+    ]
+    await client.subscribe(topics)
 
-    client = MQTTClient(client_id=log.name, loop=loop)
-    player = Player(loop=loop)
-
-    try:
-        await client.connect(config.MQTT_URL)
-
-        topics = [
-            # ('$SYS/broker/uptime', QOS_1),
-            # ('$SYS/broker/load/#', QOS_2),
-            ('ledbot/play/#', QOS_0),
-        ]
-        await client.subscribe(topics)
-
-        await mqtt_client_loop(client, player)
-
-    finally:
-        await client.disconnect()
+    await mqtt_client_loop()

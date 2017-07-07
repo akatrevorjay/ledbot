@@ -9,21 +9,20 @@ import json
 import time
 import uuid
 import weakref
-import typing as T
 
 import aiohttp
-import websockets
 import attr
 import aiorwlock
+import websockets
 import yarl
+
 from rwlock.rwlock import RWLock
 
-from functools import singledispatch
-
+from .. import di, utils
 from ..debug import pp, pf, see
-from .. import log, utils
+from ..log import get_logger
 
-log = log.get_logger()
+log = get_logger()
 
 _sentinel = object()
 
@@ -446,7 +445,7 @@ class Client:
         if data:
             return json.dumps({"id": uuid.uuid4().int, **data})
 
-    @singledispatch
+    @functools.singledispatch
     async def retrieve_data(producer):
         log.warn("Unknown producer type. Skipping...")
 
@@ -457,3 +456,31 @@ class Client:
     @retrieve_data.register(types.FunctionType)
     async def _(producer):
         return await producer()
+
+
+async def _debug_on_slack_all(event):
+    """Slack debug handler for all events."""
+    log.debug("Event: %s", pf(event))
+
+
+@di.inject('config')
+def slack_client_factory(config):
+    log.info('Creating Slack client')
+
+    slack_client = Client(config.SLACK_API_TOKEN)
+
+    if config.DEBUG:
+        slack_client.on('*')(_debug_on_slack_all)
+
+    return slack_client
+
+di.register_factory(Client, slack_client_factory, scope='global')
+
+
+@di.inject('config', Client)
+async def connect(config, slack_client: Client, loop=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    log.debug('Connecting to Slack')
+    await slack_client.start_ws_connection()

@@ -1,49 +1,20 @@
-# import logging
-# import json
-# import collections
-# import functools
-# import operator
-# import sys
-import abc
-import os
-import re
+import asyncio
 import itertools
 
-import asyncio
-# import asyncio.queues
-# import asyncio.locks
-# import asyncio.events
-# import asyncio.futures
-# import asyncio.log
-# import aiohttp
-import typing as T
-
 import six
-import aiohttp
 import attr
-# import paco
-import kawaiisync
-# import funcy
-# import mpv
 import yarl
-import youtube_dl
 
 from hbmqtt.client import MQTTClient
 from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
 
-from . import aioslack
-
+from .. import di, utils
 from ..log import get_logger
-
-from .. import di, utils, debug
-from ..utils import AttrDict
-
 from ..debug import pp, pf, see
 
-log = get_logger()
+from . import aioslack
 
-slack_client = None
-mqttc = None
+log = get_logger()
 
 
 @attr.s(repr=False)
@@ -66,9 +37,8 @@ class SlackMessage(aioslack.RtmEvent):
         log.error('Not playable %s', self)
 
 
-async def queue_to_play(uri: yarl.URL, content_type: str='generic'):
-    global mqttc
-
+@di.inject(MQTTClient)
+async def queue_to_play(mqttc: MQTTClient, uri, content_type: str='generic'):
     log.debug("Queuing uri=%s content_type=%s", uri, content_type)
 
     topic = 'ledbot/play/%s' % content_type
@@ -83,38 +53,14 @@ async def queue_to_play(uri: yarl.URL, content_type: str='generic'):
     log.info('Queued buri=%s', buri)
 
 
-@di.inject('config')
-async def ainit(config, loop=None):
+@di.inject('config', aioslack.Client)
+async def ainit(config, slack_client, loop=None):
     if loop is None:
         loop = asyncio.get_event_loop()
 
-    log.debug('init')
+    log.debug('start')
 
-    global slack_client, mqttc
-
-    slack_client = aioslack.Client(config.SLACK_API_TOKEN)
-    slack_client.on('*')(_on_slack_all)
     slack_client.on('message')(_on_slack_message)
-
-    mqttc = MQTTClient(client_id=log.name, loop=loop)
-
-
-@di.inject('config')
-async def start(config, loop=None):
-    if loop is None:
-        loop = asyncio.get_event_loop()
-
-    global slack_client, mqttc
-
-    log.debug('Connecting to Slack and MQTT')
-
-    await mqttc.connect(config.MQTT_URL)
-    await slack_client.start_ws_connection()
-
-
-async def _on_slack_all(event):
-    """Slack debug handler for all events."""
-    log.debug("Event: %s", pf(event))
 
 
 async def _on_slack_message(event):

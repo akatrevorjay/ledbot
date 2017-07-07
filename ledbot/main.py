@@ -12,7 +12,7 @@ from sanic_openapi import swagger_blueprint, openapi_blueprint
 
 from . import blueprints
 
-from . import di, signals, get_logger
+from . import di, signals, get_logger, utils, service, mqtt
 
 log = get_logger()
 
@@ -55,21 +55,9 @@ def app_factory() -> Sanic:
     return app
 
 
-async def run(app):
-    app.run(debug=True)
-
-
-def init(argv):
-    log.info("init")
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-
 @di.inject('config')
-def main(config, argv):
-    log.info("begin")
-
-    loop = asyncio.get_event_loop()
-    loop.set_debug(config.DEBUG)
+async def run(config, app):
+    log.debug('run')
 
     app = app_factory()  # type: Sanic
 
@@ -86,6 +74,31 @@ def main(config, argv):
         # protocol=None,
         log_config=config.LOGGING,
     )
+
+    await fut
+
+
+def init(argv):
+    log.info("init")
+    service.set_service_name('main')
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+
+async def ainit():
+    log.debug('ainit')
+    await mqtt.mqtt_client_connect()
+
+
+@di.inject('config')
+def main(config, argv):
+    log.info("begin")
+
+    loop = asyncio.get_event_loop()
+    loop.set_debug(config.DEBUG)
+
+    loop.run_until_complete(ainit())
+
+    fut = run()
     loop.run_until_complete(fut)
 
     loop.close()

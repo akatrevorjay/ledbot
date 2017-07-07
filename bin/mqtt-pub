@@ -11,20 +11,16 @@ export path=(
 
 hash -r
 
-cmd=()
-
 name=$0:t
+cmd=($name)
 case $name in
     mqtt-*)
         base=${name#mqtt-}
         cmd=(python ${0:h}/../lib/hbmqtt/scripts/${base}_script.py)
-        ;&
+        ;|
     mqtt-pub|mqtt-sub)
         cmd+=(--url $LEDBOT_MQTT_URL)
-        ;;
-    *)
-        cmd=($name)
-        ;;
+        ;|
 esac
 
 echo "[$0:t] exec: $cmd $*" >&2

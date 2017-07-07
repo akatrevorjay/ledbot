@@ -7,6 +7,8 @@ APP_NAME = 'ledbot'
 APP_DESC = '{name}/{version}'.format(name=APP_NAME, version=__version__)
 PACKAGE_PATH = os.path.dirname(__file__)
 
+SERVICE_NAME = None
+
 DEBUG = False
 PROFILING = False
 TESTING = False
