@@ -16,6 +16,7 @@ from .injection import di  # NOQA
 # Import anything that attaches to `on_early_init`
 # Configuration and logger setup is our top priority
 from . import configuration, log  # NOQA
+from .log import get_logger       # NOQA
 
 # Eawly init is where gross things go to be initialized. Don't be gross.
 # from ledbot import configuration, log, _gross

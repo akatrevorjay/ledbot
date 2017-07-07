@@ -117,7 +117,7 @@ async def main(config, loop=None):
     player = Player(loop=loop)
 
     try:
-        await client.connect('mqtt://localhost/')
+        await client.connect(config.MQTT_URL)
 
         topics = [
             # ('$SYS/broker/uptime', QOS_1),

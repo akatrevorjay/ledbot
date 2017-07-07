@@ -1,0 +1,4 @@
+#!/bin/zsh
+set -eo pipefail
+
+exec pip-compile --annotate -vp --generate-hashes --output-file requirements.txt.lock requirements.txt setup.py

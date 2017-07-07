@@ -1,69 +1,80 @@
+#!/usr/bin/env python3
+
 import asyncio
 import logging
 import sys
 
-from . import log
-from . import signals
-from . import text
+import asyncio
+import uvloop
 
-from aiohttp import web
-import aiohttp_jinja2
-import jinja2
+from sanic import Sanic
+from sanic_openapi import swagger_blueprint, openapi_blueprint
 
-from .views import setup as setup_routes
+from blueprints.car import blueprint as car_blueprint
+from blueprints.driver import blueprint as driver_blueprint
+from blueprints.garage import blueprint as garage_blueprint
+from blueprints.manufacturer import blueprint as manufacturer_blueprint
 
-_LOG = log.get_logger()
+from . import signals, get_logger
+
+log = get_logger()
 
 
 @signals.startup
 async def start_background_tasks(app):
-    _LOG.info('Startup: %s', app)
-
-    # app['idler'] = app.loop.create_task(idler(app))
+    log.info('Startup: %s', app)
 
 
 @signals.cleanup
 async def cleanup_background_tasks(app):
-    _LOG.info('Cleanup: %s', app)
-
-    # app['idler'].cancel()
-    # await app['idler']
+    log.info('Cleanup: %s', app)
 
 
-async def init(loop):
-    app = web.Application(loop=loop)
-
-    app['sockets'] = {}
-
-    app.on_startup.append(signals.startup)
-    app.on_cleanup.append(signals.cleanup)
-    app.on_shutdown.append(signals.shutdown)
-
-    aiohttp_jinja2.setup(app, loader=jinja2.PackageLoader('ledbot', 'templates'))
-
-    setup_routes(app)
-
+def app_factory():
+    app = Sanic()
     return app
 
 
-async def shutdown(app):
-    for ws in app['sockets'].values():
-        await ws.close()
-    app['sockets'].clear()
+def configure_app(app):
+    app.blueprint(openapi_blueprint)
+    app.blueprint(swagger_blueprint)
+    app.blueprint(car_blueprint)
+    app.blueprint(driver_blueprint)
+    app.blueprint(garage_blueprint)
+    app.blueprint(manufacturer_blueprint)
+
+    app.config.API_VERSION = '1.0.0'
+    app.config.API_TITLE = 'Car API'
+    app.config.API_TERMS_OF_SERVICE = 'Use with caution!'
+    app.config.API_CONTACT_EMAIL = 'channelcat@gmail.com'
+
+
+async def run_app(app):
+    app.run(debug=True)
+
+
+def init(argv):
+    log.info("init")
+
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 def main(argv):
-    # init logging
-    logging.basicConfig(level=logging.DEBUG)
+    log.info("begin")
 
     loop = asyncio.get_event_loop()
+    loop.set_debug(True)
 
-    app = loop.run_until_complete(init(loop))
+    app = app_factory()
+    configure_app(app)
 
-    web.run_app(app, port=80)
+    # fut = app.run(
+    loop.run_until_complete(fut)
 
-    return app
+    loop.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    init(sys.argv)
     main(sys.argv)

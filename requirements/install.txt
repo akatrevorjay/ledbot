@@ -1,4 +1,36 @@
-six
-sortedcontainers
+# helps to get this guy first
+Cython
+cffi
+
+# mine
+meinconf
+uninhibited
+mainline
+
+# async
 aiohttp
-slack-sage
+aiorwlock
+hbmqtt
+kawaiisync
+paco
+uvloop
+websockets
+
+# sync
+attrs
+cachetools
+#cerberus
+#click
+#pafy
+python-mpv
+rwlock
+setproctitle
+#sortedcontainers
+six
+yarl
+youtube-dl
+
+# logs
+coloredlogs
+colorlog
+

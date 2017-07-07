@@ -1,0 +1,31 @@
+#!/bin/zsh
+set -eo pipefail
+
+export VIRTUAL_ENV=${WORKON_HOME:-$HOME/.virtualenvs}/ledbot
+
+export path=(
+    $VIRTUAL_ENV/bin
+    ${0:h:A}
+    $path
+)
+
+hash -r
+
+cmd=()
+
+name=$0:t
+case $name in
+    mqtt-*)
+        base=${name#mqtt-}
+        cmd=(python ${0:h}/../lib/hbmqtt/scripts/${base}_script.py)
+        ;&
+    mqtt-pub|mqtt-sub)
+        cmd+=(--url $LEDBOT_MQTT_URL)
+        ;;
+    *)
+        cmd=($name)
+        ;;
+esac
+
+echo "[$0:t] exec: $cmd $*" >&2
+exec $cmd "$@"
