@@ -422,17 +422,17 @@ class Client:
 
         msg = self.message_factory(msg)
         try:
-            msg.full_type
+            msg['type']
         except KeyError:
             log.exception('Received bad message; "type" key(s) missing: msg=%r', msg)
 
         log.info('[%s] --> received message=%s', msg.full_type, msg)
 
-        handlers = itertools.chain(
+        handlers = itertools.chain(*{
             self.handlers[msg.full_type],
             self.handlers[msg['type']],
             self.handlers['*'],
-        )
+        })
 
         futs = (h(msg) for h in handlers)
 
