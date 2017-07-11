@@ -62,7 +62,7 @@ LOGGING = {
     },
     'loggers': {
         # 'ledbot': dict(level='DEBUG', propogate=True),
-        'hbmqtt': dict(level='DEBUG', propogate=True),
+        'hbmqtt': dict(level='INFO', propogate=True),
     }
 }
 
