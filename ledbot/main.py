@@ -56,7 +56,7 @@ def app_factory() -> Sanic:
 
 
 @di.inject('config')
-async def run(config):
+async def run(config, loop):
     log.debug('run')
 
     app = app_factory()  # type: Sanic
@@ -102,8 +102,8 @@ def main(config, argv):
     loop.run_until_complete(ainit(loop))
 
     futs = [
-        run(),
-        slack.run(),
+        run(loop),
+        slack.run(loop),
     ]
 
     f = asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
