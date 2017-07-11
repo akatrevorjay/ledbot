@@ -48,40 +48,17 @@ def configure_app(app):
     app.config.API_CONTACT_EMAIL = 'github@trevor.joynson.io'
 
 
-def app_factory() -> Sanic:
+async def app_factory() -> Sanic:
     app = bare_app_factory()
     add_blueprints(app)
     configure_app(app)
     return app
 
 
-@di.inject('config')
-async def run(config, loop):
-    log.debug('run')
-
-    app = app_factory()  # type: Sanic
-
-    host, port = config.BIND.split(':', 1)
-    port = int(port)
-
-    fut = app.run(
-        host=host,
-        port=port,
-        debug=config.DEBUG,
-        # sock=None,
-        # workers=1,
-        # backlog=100,
-        # protocol=None,
-        log_config=config.LOGGING,
-    )
-
-    await fut
-
-
 def init(argv):
     log.info("init")
     service.set_service_name('main')
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    # asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 async def ainit(loop):
@@ -91,6 +68,36 @@ async def ainit(loop):
 
     await slack.ainit(loop)
 
+    app = await app_factory()  # type: Sanic
+
+    return app
+
+
+@di.inject('config')
+async def serve(config, app, loop):
+    host, port = config.BIND.split(':', 1)
+    port = int(port)
+
+    await app.create_server(
+        host=host,
+        port=port,
+        debug=config.DEBUG,
+        log_config=config.LOGGING,
+    )
+
+
+async def run(loop):
+    app = await ainit(loop)
+
+    await serve(app, loop)
+
+    futs = [
+        slack.run(loop),
+    ]
+
+    f = asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
+    await f
+
 
 @di.inject('config')
 def main(config, argv):
@@ -99,16 +106,9 @@ def main(config, argv):
     loop = asyncio.get_event_loop()
     loop.set_debug(config.DEBUG)
 
-    loop.run_until_complete(ainit(loop))
+    loop.run_until_complete(run(loop))
 
-    futs = [
-        run(loop),
-        slack.run(loop),
-    ]
-
-    f = asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
-    loop.run_until_complete(f)
-
+    log.info('Done. Closing event loop and exiting.')
     loop.close()
 
 

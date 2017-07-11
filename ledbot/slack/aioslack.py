@@ -481,3 +481,4 @@ async def connect(config, slack_client: Client, loop=None):
 
     log.debug('Connecting to Slack')
     await slack_client.start_ws_connection()
+

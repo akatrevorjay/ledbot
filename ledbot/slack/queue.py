@@ -54,11 +54,8 @@ async def queue_to_play(mqttc: MQTTClient, uri, content_type: str='generic'):
 
 
 @di.inject('config', aioslack.Client)
-async def ainit(config, slack_client, loop=None):
-    if loop is None:
-        loop = asyncio.get_event_loop()
-
-    log.debug('start')
+async def ainit(config, slack_client, loop):
+    log.debug('ainit')
 
     slack_client.on('message')(_on_slack_message)
 
