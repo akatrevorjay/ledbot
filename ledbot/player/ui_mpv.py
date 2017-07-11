@@ -67,8 +67,7 @@ class Player:
         await self.loop.run_in_executor(None, self.player.play, uri)
         log.info('Playing should have started for uri=%s', uri)
 
-    whitelisted_domains = [
-        'www.youtube.com',
+    whitelisted_domain_suffixes = [
         'youtube.com',
         'youtu.be',
     ]
@@ -77,7 +76,7 @@ class Player:
         log.error('Checking uri=%s', uri)
 
         uri = yarl.URL(uri)
-        if uri.host in self.whitelisted_domains:
+        if any((uri.host == s or uri.host.endswith('.%s' % s) for s in self.whitelisted_domain_suffixes)):
             return True
 
         # Bare minimum to ensure it's likely playable
