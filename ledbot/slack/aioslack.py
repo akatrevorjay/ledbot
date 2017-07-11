@@ -429,7 +429,7 @@ class Client:
         log.info('[%s] --> received message=%s', msg.full_type, msg)
 
         handler_types = {msg.full_type, msg.type, '*'}
-        handlers = itertools.chain(self.handlers[t] for t in handler_types)
+        handlers = itertools.chain(*(self.handlers[t] for t in handler_types))
 
         futs = (h(msg) for h in handlers)
 
