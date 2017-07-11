@@ -7,8 +7,6 @@ log = get_logger()
 async def ainit(loop):
     await queue.ainit(loop=loop)
 
-    await aioslack.connect(loop=loop)
-
 
 async def run(loop):
-    await queue.start(loop)
+    await aioslack.connect(loop=loop)

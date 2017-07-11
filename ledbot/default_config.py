@@ -14,7 +14,7 @@ PROFILING = False
 TESTING = False
 DEBUG_AUTORELOAD = True
 
-BIND = '0.0.0.0:8080'
+BIND = '127.0.0.1:8080'
 
 LOGGING = {
     'version': 1,

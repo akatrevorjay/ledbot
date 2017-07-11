@@ -56,7 +56,7 @@ def app_factory() -> Sanic:
 
 
 @di.inject('config')
-async def run(config, app):
+async def run(config):
     log.debug('run')
 
     app = app_factory()  # type: Sanic
