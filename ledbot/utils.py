@@ -708,5 +708,5 @@ def ignore_exc(on_fail=_sentinel, label=None, exceptions=(), silent_exceptions=(
 
             return on_fail
 
-    Return wrapper
+    return wrapper
 

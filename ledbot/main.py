@@ -68,9 +68,8 @@ async def ainit(loop):
 
     await slack.ainit(loop)
 
-    app = await app_factory()  # type: Sanic
-
-    return app
+    # app = await app_factory()  # type: Sanic
+    # return app
 
 
 @di.inject('config')
@@ -78,12 +77,12 @@ async def serve(config, app, loop):
     host, port = config.BIND.split(':', 1)
     port = int(port)
 
-    await app.create_server(
-        host=host,
-        port=port,
-        debug=config.DEBUG,
-        log_config=config.LOGGING,
-    )
+    # await app.create_server(
+    #     host=host,
+    #     port=port,
+    #     debug=config.DEBUG,
+    #     log_config=config.LOGGING,
+    # )
 
 
 async def run(loop):
