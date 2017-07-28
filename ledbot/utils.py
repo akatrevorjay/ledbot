@@ -15,7 +15,7 @@ import weakref
 
 from six.moves.urllib_parse import urlsplit, parse_qs, urlunsplit, urlencode
 
-from .log import get_logger, _namespace_from_calling_context
+from .log import get_logger
 
 _log = get_logger()
 
@@ -138,7 +138,7 @@ def set_proc_title(title=None, base='ledbot'):
     import setproctitle
 
     if not title:
-        title = _namespace_from_calling_context()
+        title = namespace_from_calling_context()
 
     parts = [base, title]
     parts = [p for p in parts if p]
@@ -664,3 +664,49 @@ class RegistryTree(Tree):
 
     # Alias
     register = Tree.__setitem__
+
+
+def namespace_from_calling_context():
+    """
+    Derive a namespace from the module containing the caller's caller.
+
+    :return: the fully qualified python name of a module.
+    :rtype: str
+    """
+    return inspect.stack()[2][0].f_globals["__name__"]
+
+
+def ignore_exc(on_fail=_sentinel, label=None, exceptions=(), silent_exceptions=()):
+    """
+    Decorator to ignore exceptions and log them, unless they are also in `silent_exceptions`.
+
+    :param object on_fail: What to return on fail. Can be `callable` with argspec `(fn, instance, args, kwargs, exc)`.
+    :param str label: Label to use in the exception log message. Defaults to __name__ of the caller.
+    :param collections.Iterable[Exception] exceptions: Iterable of exceptions to ignore.
+    :param collections.Iterable[Exception] silent_exceptions: Iterable of exceptions to *not* log when hit. SBD.
+    """
+    if not label:
+        label = _namespace_from_calling_context()
+
+    # short circuit
+    if not exceptions:
+        def saranwrap(fn):
+            return fn
+        return saranwrap
+
+    @wrapt.decorator
+    def wrapper(fn, instance, args, kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except exceptions as exc:
+            if not isinstance(exc, silent_exceptions):
+                log.exception("Ignored %s exception in %s(*%s, **%s) on_fail=%s: %s",
+                            label, fn, args, kwargs, on_fail, exc)
+
+            if callable(on_fail):
+                return on_fail(fn, instance, args, kwargs, exc)
+
+            return on_fail
+
+    Return wrapper
+
