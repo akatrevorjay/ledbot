@@ -411,7 +411,7 @@ class Client:
                     await websocket.send(message)
 
             if len(done) == len(tasks):
-                time.sleep(0.1)
+                asyncio.sleep(0.1)
 
     async def consumer(self, message_raw):
         try:
