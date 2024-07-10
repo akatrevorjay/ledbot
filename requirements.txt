@@ -1,1 +1,39 @@
-requirements/install.txt
+# helps to get this guy first
+Cython
+cffi
+
+# mine
+meinconf
+uninhibited
+mainline
+
+# async
+aiohttp
+aiorwlock
+hbmqtt
+kawaiisync
+paco
+uvloop
+websockets
+
+# sync
+attrs
+cachetools
+#cerberus
+#click
+#pafy
+python-mpv
+rwlock
+setproctitle
+sanic
+sanic-openapi
+#sortedcontainers
+six
+yarl
+youtube-dl
+
+# logs
+coloredlogs
+colorlog
+
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
