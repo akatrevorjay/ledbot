@@ -16,7 +16,7 @@ cmd=($name)
 case $name in
     mqtt-*)
         base=${name#mqtt-}
-        cmd=(python ${0:h}/../lib/hbmqtt/scripts/${base}_script.py)
+        cmd=(python ${0:h}/../lib/amqtt/amqtt/scripts/${base}_script.py)
         ;|
     mqtt-pub|mqtt-sub)
         cmd+=(--url $LEDBOT_MQTT_URL)

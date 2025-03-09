@@ -4,8 +4,8 @@ import sys
 
 import yarl
 
-from hbmqtt.client import MQTTClient
-from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
+from amqtt.client import MQTTClient
+from amqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
 
 from . import di, signals, get_logger
 
@@ -19,7 +19,6 @@ def mqtt_client_factory(config, loop=None):
 
     c = MQTTClient(
         client_id=config.SERVICE_NAME,
-        loop=loop,
     )
 
     return c

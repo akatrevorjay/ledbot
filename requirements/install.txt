@@ -10,8 +10,9 @@ mainline
 # async
 aiohttp
 aiorwlock
-hbmqtt
-kawaiisync
+#hbmqtt
+amqtt
+#kawaiisync
 paco
 uvloop
 websockets

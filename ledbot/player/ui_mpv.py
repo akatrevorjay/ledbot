@@ -9,8 +9,8 @@ import aiohttp
 import mpv
 import yarl
 
-from hbmqtt.client import MQTTClient
-from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
+from amqtt.client import MQTTClient
+from amqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
 
 from .. import di, utils, debug, mqtt
 from ..log import get_logger
