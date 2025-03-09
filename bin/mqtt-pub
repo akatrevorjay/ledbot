@@ -9,17 +9,15 @@ export path=(
     $path
 )
 
-hash -r
-
 name=$0:t
 cmd=($name)
 case $name in
     mqtt-*)
         base=${name#mqtt-}
-        cmd=(python ${0:h}/../lib/amqtt/amqtt/scripts/${base}_script.py)
+		cmd=(amqtt_$base)
         ;|
     mqtt-pub|mqtt-sub)
-        cmd+=(--url $LEDBOT_MQTT_URL)
+        cmd+=(--url ${LEDBOT_MQTT_URL:?})
         ;|
 esac
 

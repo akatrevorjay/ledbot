@@ -1,6 +1,14 @@
 #!/bin/zsh
 set -eo pipefail
 
+export VIRTUAL_ENV=${WORKON_HOME:-$HOME/.virtualenvs}/ledbot
+
+export path=(
+    $VIRTUAL_ENV/bin
+    ${0:h:A}
+    $path
+)
+
 for v in "$@"; do
     ${0:h}/mqtt-pub -t ledbot/play/cli -m $v
 done
