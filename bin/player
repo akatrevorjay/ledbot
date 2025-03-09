@@ -1,0 +1,13 @@
+#!/bin/zsh
+set -euo pipefail
+
+export VIRTUAL_ENV=${WORKON_HOME:-$HOME/.virtualenvs}/ledbot
+
+export path=(
+    $VIRTUAL_ENV/bin
+    ${0:h:A}
+    $path
+)
+
+python -m ledbot.player
+
