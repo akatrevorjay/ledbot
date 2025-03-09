@@ -83,7 +83,7 @@ class StateMapping(utils.TimedValueSet):
             super().discard(v)
 
     _pop_lock = attr.ib(default=attr.Factory(
-        lambda self: asyncio.Lock(loop=self._parent.client.loop),
+        lambda self: asyncio.Lock(),
         takes_self=True,
     ))
 

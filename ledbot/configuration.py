@@ -5,7 +5,7 @@ import os
 import attr
 
 import uninhibited
-import meinconf
+import ein
 from mainline import Catalog
 
 from ledbot import signals, di
@@ -16,7 +16,7 @@ class ConfigCatalog(Catalog):
 
     @di.provider(scope='global')
     def config():
-        config = meinconf.EventfulConfig('ledbot')
+        config = ein.EventfulConfig('ledbot')
         config.configure()
         return config
 

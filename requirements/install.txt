@@ -3,7 +3,7 @@ Cython
 cffi
 
 # mine
-meinconf
+ein
 uninhibited
 mainline
 

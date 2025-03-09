@@ -1,4 +1,5 @@
 import attr
+import typing
 import random
 import sys
 import six
@@ -33,7 +34,7 @@ def _get_object_init():
 OBJECT_INIT = _get_object_init()
 
 
-class ProxyMutableMapping(collections.MutableMapping):
+class ProxyMutableMapping(typing.MutableMapping):
     """Proxies an existing Mapping."""
 
     def __init__(self, mapping):
@@ -79,10 +80,10 @@ class MissingProxyMutableMapping(ProxyMutableMapping):
 
 
 @attr.s
-class ProxyMutableSet(collections.MutableSet):
+class ProxyMutableSet(typing.MutableSet):
     """Proxies an existing set-like object."""
 
-    _store: collections.MutableSet = attr.ib(default=attr.Factory(set))
+    _store: typing.MutableSet = attr.ib(default=attr.Factory(set))
 
     def __contains__(self, item):
         return item in self._store
@@ -533,7 +534,7 @@ def traverse_tree(mapping, keys=[ALL], __level=0):
     Traverse dictionary `mapping` on the specified `traverse_keys`, yielding each node. NOT thread safe.
     If `traverse_tree.ALL` is included in `keys`, then every edge node will be yielded.
 
-    :param mapping collections.Mapping: Dictionary
+    :param mapping typing.Mapping: Dictionary
     :param keys collections.Iterable: Iterable of keys to walk down
 
     >>> data = {'count': 2,
@@ -574,7 +575,7 @@ def get_tree_node(mapping, key, default=_sentinel, parent=False):
     Dimension can be specified via ':'
 
     Arguments:
-        mapping collections.Mapping: Mapping to fetch from
+        mapping typing.Mapping: Mapping to fetch from
         key str|unicode: Key to lookup, allowing for : notation
         default object: Default value. If set to `:module:_sentinel`, raise KeyError if not found.
         parent bool: If True, return parent node. Defaults to False.
@@ -606,7 +607,7 @@ def set_tree_node(mapping, key, value):
     Set arbitrary node on a tree-like mapping structure, allowing for : notation to signify dimension.
 
     Arguments:
-        mapping collections.Mapping: Mapping to fetch from
+        mapping typing.Mapping: Mapping to fetch from
         key str|unicode: Key to set, allowing for : notation
         value str|unicode: Value to set `key` to
         parent bool: If True, return parent node. Defaults to False.
