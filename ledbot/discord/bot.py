@@ -5,6 +5,7 @@ import six
 import attr
 import yarl
 import discord
+from typing import Optional
 
 from .. import di, utils
 from ..log import get_logger
@@ -19,7 +20,7 @@ class LedbotDiscordClient(discord.Client):
     async def on_ready(self):
         log.info(f"logged in as user={self.user!r}")
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         if message.author == self.user:
             # don't respond to ourselves
             return
@@ -30,10 +31,25 @@ class LedbotDiscordClient(discord.Client):
 
         log.info(f"got message: {message.author}: {message.content}")
 
+        uri: Optional[str] = None
+
         if message.content.startswith('http'):
             # This does better uri checking
-            await queue_to_play(message.content)
+            uri = message.content
 
+        elif message.attachments:
+            for attachment in message.attachments:
+                # if attachment.content_type.startswith('image'):
+                if attachment.url:
+                    uri = attachment.url
+
+        if uri:
+            await queue_to_play(uri)
+
+            # add heart on message that was sent
+            emoji = '👀'
+            await message.add_reaction(emoji)
+            return
 
 
 @di.inject('config')
