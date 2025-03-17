@@ -1,0 +1,12 @@
+[Unit]
+Description=ledbot.server
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+EnvironmentFile=%h/ledbot/.env
+ExecStart=%h/ledbot/bin/server
+
+[Install]
+WantedBy=default.target
+
