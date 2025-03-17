@@ -88,15 +88,13 @@ async def serve(config, app, loop):
 async def run(loop):
     app = await ainit(loop)
 
+    # TODO (trevorj) Sanic api rotted, redo and re-enable
     #await serve(app, loop)
 
     futs = [
         asyncio.ensure_future(discord.run(loop))
     ]
     await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
-
-    f = asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
-    await f
 
 
 @di.inject('config')

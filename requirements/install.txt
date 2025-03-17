@@ -10,9 +10,7 @@ mainline
 # async
 aiohttp
 aiorwlock
-#hbmqtt
 amqtt
-#kawaiisync
 paco
 uvloop
 websockets
@@ -20,9 +18,6 @@ websockets
 # sync
 attrs
 cachetools
-#cerberus
-#click
-#pafy
 python-mpv
 rwlock
 setproctitle
