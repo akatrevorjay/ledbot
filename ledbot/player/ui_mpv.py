@@ -51,7 +51,10 @@ class Player:
             # force_window_position=True,
             loop_file=True,
             cache=True,
-            cache_secs=30,
+            # ceche_on_disk=True,
+            cache_secs=86400,
+            demuxer_max_bytes=1024 * 1024 * 1024 * 1,
+            #demuxer_readahead_secs=30,
         )
 
         return player
