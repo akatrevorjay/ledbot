@@ -12,7 +12,7 @@ from sanic import Sanic
 
 from . import blueprints
 
-from . import di, signals, get_logger, utils, service, mqtt, slack
+from . import di, signals, get_logger, utils, service, mqtt, discord
 
 log = get_logger()
 
@@ -66,7 +66,7 @@ async def ainit(loop):
 
     await mqtt.mqtt_client_connect()
 
-    await slack.ainit(loop)
+    await discord.ainit(loop)
 
     # app = await app_factory()  # type: Sanic
     # return app
@@ -91,8 +91,9 @@ async def run(loop):
     #await serve(app, loop)
 
     futs = [
-        slack.run(loop),
+        asyncio.ensure_future(discord.run(loop))
     ]
+    await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
 
     f = asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
     await f

@@ -32,6 +32,7 @@ sanic-openapi
 six
 yarl
 youtube-dl
+validators
 
 # logs
 coloredlogs
