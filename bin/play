@@ -10,5 +10,10 @@ export path=(
 )
 
 for v in "$@"; do
-    ${0:h}/mqtt-pub -t ledbot/play/cli -m $v
+    if [[ -e $v ]]; then
+        # abs file paths
+        v=${v:A}
+    fi
+
+    ${0:h}/mqtt-pub -t ledbot/play/cli -m $v;
 done
