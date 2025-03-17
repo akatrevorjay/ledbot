@@ -76,6 +76,8 @@ class Player:
         log.error('Checking uri=%s', uri)
 
         uri = yarl.URL(uri)
+        if not uri:
+            return False
         if any((uri.host == s or uri.host.endswith('.%s' % s) for s in self.whitelisted_domain_suffixes)):
             return True
 
@@ -95,7 +97,14 @@ class Player:
 
     async def on_mqtt_event(self, topic: str, data: bytearray):
         uri = data.decode()
-        await self.play_uri(uri)
+        content_type = topic.split('ledbot/play/')[1]
+
+        # Only check uris if it's not from the local client
+        # This allows local file paths to work
+        check = True
+        if content_type == 'cli':
+            check = False
+        await self.play_uri(uri, check=check)
 
 
 di.register_factory(Player, Player, scope='global')
