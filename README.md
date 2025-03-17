@@ -1,7 +1,7 @@
 ledbot
 ======
 
-Social RGB matrix display control. Plays images and videos shared on Discord, sent to the API, or sent via MQTT.
+Social RGB matrix display control. Plays images, videos, and youtube uris shared on Discord, sent to the API, or sent via MQTT.
 
 Demos:
 * https://www.youtube.com/watch?v=kz3NuzpRhco
