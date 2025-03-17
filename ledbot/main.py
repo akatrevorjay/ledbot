@@ -8,7 +8,7 @@ import asyncio
 import uvloop
 
 from sanic import Sanic
-from sanic_openapi import swagger_blueprint, openapi_blueprint
+#from sanic_openapi import swagger_blueprint, openapi_blueprint
 
 from . import blueprints
 
@@ -35,8 +35,8 @@ def bare_app_factory(config):
 
 
 def add_blueprints(app):
-    app.blueprint(openapi_blueprint)
-    app.blueprint(swagger_blueprint)
+    #app.blueprint(openapi_blueprint)
+    #app.blueprint(swagger_blueprint)
 
     app.blueprint(blueprints.play_bp)
 
@@ -88,7 +88,7 @@ async def serve(config, app, loop):
 async def run(loop):
     app = await ainit(loop)
 
-    await serve(app, loop)
+    #await serve(app, loop)
 
     futs = [
         slack.run(loop),
