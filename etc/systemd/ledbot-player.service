@@ -8,6 +8,8 @@ EnvironmentFile=%h/ledbot/.env
 ExecStart=%h/ledbot/bin/player
 ExecStartPost=/bin/sleep 5
 ExecStartPost=%h/ledbot/bin/play %h/ledbot/gifs/tacos-nyan.gif
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=default.target

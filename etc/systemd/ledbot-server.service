@@ -6,6 +6,8 @@ Type=simple
 Environment=DISPLAY=:0
 EnvironmentFile=%h/ledbot/.env
 ExecStart=%h/ledbot/bin/server
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=default.target
